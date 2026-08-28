@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DATS Decision Review Dashboard v2</title>
+    <script src="/static/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b1120;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 1.25rem; color: #60a5fa; }
+        .nav-links { display: flex; gap: 1.5rem; }
+        .nav-links a { color: #94a3b8; text-decoration: none; font-size: 0.875rem; }
+        .nav-links a:hover { color: #e2e8f0; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 1.5rem; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem; }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+        }
+        .card h2 { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-large { font-size: 1.5rem; font-weight: 700; color: #f8fafc; }
+        .metric-positive { color: #34d399; }
+        .metric-negative { color: #f87171; }
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+        }
+        .controls input, .controls select {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        .controls button {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .controls button:hover { background: #2563eb; }
+        .controls button.secondary { background: #475569; }
+        .controls button.secondary:hover { background: #64748b; }
+        .controls button.danger { background: #dc2626; }
+        .controls button.danger:hover { background: #b91c1c; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        th, td { padding: 0.625rem; text-align: left; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-weight: 500; cursor: pointer; }
+        th:hover { color: #e2e8f0; }
+        .badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+        }
+        .badge-buy { background: #064e3b; color: #34d399; }
+        .badge-sell { background: #450a0a; color: #f87171; }
+        .badge-hold { background: #713f12; color: #fbbf24; }
+        .badge-review { background: #ea580c; color: #fed7aa; }
+        .badge-reviewed { background: #059669; color: #d1fae5; }
+        .actions { display: flex; gap: 0.375rem; }
+        .actions button {
+            background: #334155;
+            color: #e2e8f0;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .actions button:hover { background: #475569; }
+        .actions button.primary { background: #3b82f6; }
+        .actions button.primary:hover { background: #2563eb; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            max-width: 800px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .modal-header h2 { color: #60a5fa; font-size: 1.25rem; }
+        .close-btn { background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; }
+        .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+        .detail-item { padding: 0.5rem; background: #0f172a; border-radius: 0.25rem; }
+        .detail-label { color: #94a3b8; font-size: 0.75rem; }
+        .detail-value { color: #f8fafc; font-size: 0.875rem; font-weight: 500; }
+        .chart-container { position: relative; height: 220px; margin-top: 0.5rem; }
+        .timeline {
+            position: relative;
+            padding-left: 1.5rem;
+            border-left: 2px solid #334155;
+        }
+        .timeline-item {
+            position: relative;
+            padding: 0.75rem 0;
+            padding-left: 1rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -1.625rem;
+            top: 1rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3b82f6;
+        }
+        .timeline-time { color: #64748b; font-size: 0.75rem; }
+        .loading { text-align: center; padding: 2rem; color: #64748b; }
+        .error { background: #450a0a; color: #f87171; padding: 0.75rem; border-radius: 0.375rem; }
+        .tab-bar { display: flex; gap: 0; border-bottom: 1px solid #334155; margin-bottom: 1rem; }
+        .tab {
+            padding: 0.625rem 1.25rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        .tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+        .tab:hover { color: #e2e8f0; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .review-form { margin-top: 1rem; }
+        .review-form textarea {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        .review-form button {
+            margin-top: 0.5rem;
+            background: #059669;
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+        .ai-advisory-box {
+            background: #1e3a5f;
+            border: 1px solid #3b82f6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        .ai-advisory-box h3 { color: #60a5fa; font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .ai-advisory-box p { color: #bfdbfe; font-size: 0.8125rem; }
+        .ai-advisory-box .warning {
+            color: #fbbf24;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>DATS Decision Review Dashboard v2</h1>
+        <nav class="nav-links">
+            <a href="/operator">Operator</a>
+            <a href="/dashboard">Decisions</a>
+        </nav>
+    </div>
+
+    <div class="container">
+        <!-- Summary Cards -->
+        <div class="grid-4">
+            <div class="card">
+                <h2>Total Decisions</h2>
+                <div class="metric-large" id="total-decisions">--</div>
+            </div>
+            <div class="card">
+                <h2>Pending Review</h2>
+                <div class="metric-large metric-negative" id="pending-reviews">--</div>
+            </div>
+            <div class="card">
+                <h2>Reviewed</h2>
+                <div class="metric-large metric-positive" id="reviewed-count">--</div>
+            </div>
+            <div class="card">
+                <h2>Avg Confidence</h2>
+                <div class="metric-large" id="avg-confidence">--</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>Portfolio Evolution</h2>
+                <div class="chart-container">
+                    <canvas id="portfolio-chart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Risk Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="risk-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Strategy Comparison -->
+        <div class="card" style="margin-bottom:1rem">
+            <h2>Strategy Comparison</h2>
+            <div class="chart-container" style="height:180px">
+                <canvas id="strategy-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <input type="text" id="search-text" placeholder="Search symbols, strategies..." style="min-width:220px" />
+            <select id="filter-strategy">
+                <option value="">All Strategies</option>
+            </select>
+            <select id="filter-status">
+                <option value="">All Status</option>
+                <option value="REVIEW_REQUIRED">Review Required</option>
+                <option value="REVIEWED">Reviewed</option>
+            </select>
+            <select id="filter-signal">
+                <option value="">All Signals</option>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+                <option value="HOLD">HOLD</option>
+            </select>
+            <input type="date" id="filter-date-from" />
+            <input type="date" id="filter-date-to" />
+            <button onclick="applyFilters()">Apply Filters</button>
+            <button class="secondary" onclick="clearFilters()">Clear</button>
+            <button class="danger" onclick="exportVisible()">Export Visible</button>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="tab-bar">
+            <div class="tab active" onclick="switchTab('table')">Decision Table</div>
+            <div class="tab" onclick="switchTab('timeline')">Timeline</div>
+        </div>
+
+        <!-- Table Panel -->
+        <div class="tab-panel active" id="panel-table">
+            <div class="card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th onclick="sortBy('timestamp')">Time &#x2195;</th>
+                            <th onclick="sortBy('symbol')">Symbol &#x2195;</th>
+                            <th onclick="sortBy('strategy')">Strategy &#x2195;</th>
+                            <th>Signal</th>
+                            <th onclick="sortBy('confidence')">Confidence &#x2195;</th>
+                            <th onclick="sortBy('price')">Price &#x2195;</th>
+                            <th onclick="sortBy('pnl')">P&L &#x2195;</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="decisions-table">
+                        <tr><td colspan="9" class="loading">Loading decisions...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Timeline Panel -->
+        <div class="tab-panel" id="panel-timeline">
+            <div class="card">
+                <div class="timeline" id="decisions-timeline">
+                    <div class="loading">Loading timeline...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal" id="detail-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Decision Detail</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let allDecisions = [];
+        let portfolioChart, riskChart, strategyChart;
+        let currentSort = { field: 'timestamp', dir: 'desc' };
+
+        async function fetchJSON(url, opts) {
+            const res = await fetch(url, opts);
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        // ========== CHARTS ==========
+        function initCharts() {
+            const ctxP = document.getElementById('portfolio-chart').getContext('2d');
+            portfolioChart = new Chart(ctxP, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Portfolio Value',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    }, {
+                        label: 'Cash',
+                        data: [],
+                        borderColor: '#34d399',
+                        backgroundColor: 'rgba(52,211,153,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+                    scales: {
+                        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                        y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                    },
+                }
+            });
+
+            const ctxR = document.getElementById('risk-chart').getContext('2d');
+            riskChart = new Chart(ctxR, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Passed', 'Failed', 'Warning'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#34d399', '#f87171', '#fbbf24'],
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } } },
+                }
+            });
+
+            const ctxS = document.getElementById('strategy-chart').getContext('2d');
+            strategyChart = new Chart(ctxS, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Count',
+                        data: [],
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+                        y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                    },
+                }
+            });
+        }
+
+        // ========== DATA LOADING ==========
+        async function loadSummary() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/summary/pipeline`);
+                document.getElementById('total-decisions').textContent = data.total_decisions_recorded || 0;
+                document.getElementById('pending-reviews').textContent = data.pending_reviews || 0;
+                document.getElementById('reviewed-count').textContent = data.reviewed || 0;
+                const avg = data.avg_confidence !== undefined ? data.avg_confidence : 0;
+                document.getElementById('avg-confidence').textContent = avg.toFixed(2);
+            } catch (e) {}
+        }
+
+        async function loadDecisions() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/?limit=1000`);
+                allDecisions = data.records || [];
+                populateStrategyFilter();
+                applyFilters();
+                updateCharts();
+            } catch (e) {
+                document.getElementById('decisions-table').innerHTML = `<tr><td colspan="9" class="error">Error: ${e.message}</td></tr>`;
+            }
+        }
+
+        function populateStrategyFilter() {
+            const strategies = [...new Set(allDecisions.map(r => r.strategy).filter(Boolean))];
+            const select = document.getElementById('filter-strategy');
+            select.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
+
+        function getSignal(r) {
+            if (r.outcome) return 'HOLD';
+            return r.confidence > 0.5 ? 'BUY' : 'SELL';
+        }
+
+        function filterDecisions() {
+            const search = document.getElementById('search-text').value.toLowerCase();
+            const strategy = document.getElementById('filter-strategy').value;
+            const status = document.getElementById('filter-status').value;
+            const signal = document.getElementById('filter-signal').value;
+            const dateFrom = document.getElementById('filter-date-from').value;
+            const dateTo = document.getElementById('filter-date-to').value;
+
+            return allDecisions.filter(r => {
+                if (search && !((r.symbol || '').toLowerCase().includes(search) || (r.strategy || '').toLowerCase().includes(search))) return false;
+                if (strategy && r.strategy !== strategy) return false;
+                if (status === 'REVIEW_REQUIRED' && r.outcome) return false;
+                if (status === 'REVIEWED' && !r.outcome) return false;
+                if (signal && getSignal(r) !== signal) return false;
+                if (dateFrom && r.timestamp) {
+                    const d = new Date(r.timestamp * 1000);
+                    if (d < new Date(dateFrom)) return false;
+                }
+                if (dateTo && r.timestamp) {
+                    const d = new Date(r.timestamp * 1000);
+                    if (d > new Date(dateTo + 'T23:59:59')) return false;
+                }
+                return true;
+            });
+        }
+
+        function sortDecisions(decisions) {
+            const { field, dir } = currentSort;
+            const mult = dir === 'asc' ? 1 : -1;
+            return [...decisions].sort((a, b) => {
+                let av = a[field] || 0;
+                let bv = b[field] || 0;
+                if (typeof av === 'string') av = av.toLowerCase();
+                if (typeof bv === 'string') bv = bv.toLowerCase();
+                if (av < bv) return -1 * mult;
+                if (av > bv) return 1 * mult;
+                return 0;
+            });
+        }
+
+        function applyFilters() {
+            const filtered = sortDecisions(filterDecisions());
+            renderTable(filtered);
+            renderTimeline(filtered);
+        }
+
+        function clearFilters() {
+            document.getElementById('search-text').value = '';
+            document.getElementById('filter-strategy').value = '';
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-signal').value = '';
+            document.getElementById('filter-date-from').value = '';
+            document.getElementById('filter-date-to').value = '';
+            applyFilters();
+        }
+
+        function sortBy(field) {
+            if (currentSort.field === field) {
+                currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.dir = 'desc';
+            }
+            applyFilters();
+        }
+
+        function renderTable(decisions) {
+            const tbody = document.getElementById('decisions-table');
+            if (decisions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#64748b">No decisions match filters</td></tr>';
+                return;
+            }
+            tbody.innerHTML = decisions.slice(0, 100).map(r => {
+                const signal = getSignal(r);
+                const badgeClass = signal === 'BUY' ? 'badge-buy' : signal === 'SELL' ? 'badge-sell' : 'badge-hold';
+                const reviewStatus = r.outcome ? 'REVIEWED' : 'REVIEW_REQUIRED';
+                const reviewClass = reviewStatus === 'REVIEWED' ? 'badge-reviewed' : 'badge-review';
+                const time = r.timestamp ? new Date(r.timestamp * 1000).toLocaleString() : 'N/A';
+                const pnl = r.realized_pnl || 0;
+                const pnlClass = pnl >= 0 ? 'metric-positive' : 'metric-negative';
+                return `<tr>
+                    <td>${time}</td>
+                    <td>${r.symbol || 'N/A'}</td>
+                    <td>${r.strategy || 'N/A'}</td>
+                    <td><span class="badge ${badgeClass}">${signal}</span></td>
+                    <td>${(r.confidence || 0).toFixed(2)}</td>
+                    <td>${r.price || 'N/A'}</td>
+                    <td class="${pnlClass}">${pnl.toFixed(2)}</td>
+                    <td><span class="badge ${reviewClass}">${reviewStatus}</span></td>
+                    <td class="actions">
+                        <button onclick="viewDetail('${r.decision_id}')">View</button>
+                        <button class="primary" onclick="markReviewed('${r.decision_id}')">Review</button>
+                        <button onclick="exportDecision('${r.decision_id}')">Export</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderTimeline(decisions) {
+            const el = document.getElementById('decisions-timeline');
+            if (decisions.length === 0) {
+                el.innerHTML = '<div style="color:#64748b">No decisions</div>';
+                return;
+            }
+            el.innerHTML = decisions.slice(0, 50).map(r => {
+                const signal = getSignal(r);
+                const color = signal === 'BUY' ? '#34d399' : signal === 'SELL' ? '#f87171' : '#fbbf24';
+                const time = r.timestamp ? new Date(r.timestamp * 1000).toLocaleString() : 'N/A';
+                return `<div class="timeline-item" style="border-left-color:${color}">
+                    <div class="timeline-time">${time}</div>
+                    <div><strong style="color:${color}">${signal}</strong> ${r.symbol || 'N/A'} @ $${r.price || 'N/A'}</div>
+                    <div style="color:#94a3b8;font-size:0.75rem">${r.strategy || 'N/A'} | confidence: ${(r.confidence || 0).toFixed(2)}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function updateCharts() {
+            // Portfolio evolution (mock data if no real history)
+            const labels = allDecisions.slice(0, 20).map((_, i) => `T-${20 - i}`);
+            const values = allDecisions.slice(0, 20).map(r => 100000 + (r.realized_pnl || 0) * 100);
+            portfolioChart.data.labels = labels;
+            portfolioChart.data.datasets[0].data = values;
+            portfolioChart.data.datasets[1].data = values.map(v => v * 0.3);
+            portfolioChart.update();
+
+            // Risk distribution
+            const passed = allDecisions.filter(r => r.risk_passed).length;
+            const failed = allDecisions.filter(r => r.risk_failed).length;
+            const warning = allDecisions.length - passed - failed;
+            riskChart.data.datasets[0].data = [passed, failed, Math.max(0, warning)];
+            riskChart.update();
+
+            // Strategy comparison
+            const strategyCounts = {};
+            allDecisions.forEach(r => { strategyCounts[r.strategy || 'Unknown'] = (strategyCounts[r.strategy || 'Unknown'] || 0) + 1; });
+            strategyChart.data.labels = Object.keys(strategyCounts);
+            strategyChart.data.datasets[0].data = Object.values(strategyCounts);
+            strategyChart.update();
+        }
+
+        // ========== ACTIONS ==========
+        async function viewDetail(decisionId) {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/${decisionId}`);
+                const body = document.getElementById('modal-body');
+                body.innerHTML = `
+                    <div class="detail-grid">
+                        <div class="detail-item"><div class="detail-label">Decision ID</div><div class="detail-value">${data.decision_id}</div></div>
+                        <div class="detail-item"><div class="detail-label">Timestamp</div><div class="detail-value">${data.timestamp ? new Date(data.timestamp * 1000).toLocaleString() : 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Phase</div><div class="detail-value">${data.phase || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Symbol</div><div class="detail-value">${data.market_snapshot?.symbol || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Price</div><div class="detail-value">${data.market_snapshot?.price || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Strategy</div><div class="detail-value">${data.selected_strategy || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Confidence</div><div class="detail-value">${(data.confidence_score || 0).toFixed(4)}</div></div>
+                        <div class="detail-item"><div class="detail-label">P&L</div><div class="detail-value">${(data.realized_pnl || 0).toFixed(2)}</div></div>
+                    </div>
+                    <div style="margin-top:1rem">
+                        <div class="detail-label">Reasoning Summary</div>
+                        <div style="background:#0f172a;padding:0.75rem;border-radius:0.25rem;font-size:0.8125rem;color:#e2e8f0">${data.reasoning_summary || 'No summary available'}</div>
+                    </div>
+                    <div class="review-form">
+                        <div class="detail-label">Review Notes</div>
+                        <textarea id="review-notes-${decisionId}" placeholder="Enter review notes..."></textarea>
+                        <button onclick="submitReview('${decisionId}')">Mark as Reviewed</button>
+                    </div>
+                    <div class="ai-advisory-box">
+                        <h3>AI Advisory Review</h3>
+                        <p>This decision was generated by the DATS AI trading system. The exported package below is for advisory review only and must not modify production behavior automatically.</p>
+                        <div class="warning">Requires human approval before any action can be taken.</div>
+                        <button class="btn" style="margin-top:0.5rem" onclick="exportDecision('${decisionId}')">Export Advisory Package</button>
+                    </div>
+                `;
+                document.getElementById('detail-modal').classList.add('active');
+            } catch (e) {
+                alert('Failed to load detail: ' + e.message);
+            }
+        }
+
+        async function submitReview(decisionId) {
+            const notes = document.getElementById(`review-notes-${decisionId}`)?.value || '';
+            try {
+                await fetchJSON(`${API_BASE}/decisions/${decisionId}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reviewer: 'dashboard_user', notes })
+                });
+                closeModal();
+                loadDecisions();
+                loadSummary();
+            } catch (e) {
+                alert('Failed to submit review: ' + e.message);
+            }
+        }
+
+        async function markReviewed(decisionId) {
+            try {
+                await fetchJSON(`${API_BASE}/decisions/${decisionId}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reviewer: 'dashboard_user', notes: 'Quick review' })
+                });
+                loadDecisions();
+                loadSummary();
+            } catch (e) {
+                alert('Failed: ' + e.message);
+            }
+        }
+
+        async function exportDecision(decisionId) {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/${decisionId}/export`);
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `decision-${decisionId}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Failed to export: ' + e.message);
+            }
+        }
+
+        async function exportVisible() {
+            const filtered = filterDecisions();
+            const blob = new Blob([JSON.stringify({ decisions: filtered }, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `filtered-decisions-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`panel-${tab}`).classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('detail-modal').classList.remove('active');
+        }
+
+        // ========== INIT ==========
+        initCharts();
+        loadSummary();
+        loadDecisions();
+        setInterval(() => { loadSummary(); loadDecisions(); }, 10000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+# DATS Application Configuration
+app:
+  name: DATS
+  version: "1.0.0-beta"
+  environment: production
+  debug: false
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 4
+  reload: false
+  docs_url: /docs
+  openapi_url: /openapi.json
+
+auth:
+  secret_key: ${JWT_SECRET_KEY}
+  algorithm: HS256
+  access_token_expire_minutes: 30
+  admin_username: ${ADMIN_USERNAME}
+  admin_password: ${ADMIN_PASSWORD}
+
+database:
+  url: ${DATABASE_URL}
+  pool_size: 20
+  max_overflow: 10
+  echo: false
+
+redis:
+  url: ${REDIS_URL}
+  db: 0
+  socket_timeout: 5
+  socket_connect_timeout: 5
+
+kafka:
+  bootstrap_servers: ${KAFKA_BOOTSTRAP_SERVERS}
+  security_protocol: SASL_SSL
+  sasl_mechanism: PLAIN
+
+logging:
+  level: INFO
+  format: json
+  file: /app/logs/dats.log
+  max_bytes: 10485760
+  backup_count: 5
+
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+
+trading:
+  max_position_size_pct: 5.0
+  max_drawdown_pct: 10.0
+  daily_loss_limit_pct: 2.0
+  paper_trading: true
+  warmup_period_minutes: 60

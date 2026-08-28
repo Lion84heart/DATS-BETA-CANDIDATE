@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DATS Terminal</title>
+<style>
+:root {
+  --bg: #000000;
+  --bg-panel: #0a0a0a;
+  --bg-hover: #141414;
+  --border: #1a1a1a;
+  --text: #c8c8c8;
+  --text-dim: #666666;
+  --green: #00c851;
+  --green-dim: #006622;
+  --red: #ff4444;
+  --red-dim: #662222;
+  --amber: #ffbb33;
+  --blue: #33b5e5;
+  --cyan: #00ffff;
+  --magenta: #ff00ff;
+  --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* === TICKER TAPE === */
+.ticker-tape {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  height: 32px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-right: 1px solid var(--border);
+  height: 100%;
+}
+
+.ticker-symbol { font-weight: 700; color: var(--text); }
+.ticker-price { font-weight: 600; }
+.ticker-change { font-weight: 600; }
+.ticker-pct { color: var(--text-dim); }
+
+.up { color: var(--green); }
+.down { color: var(--red); }
+
+/* === TOP BAR === */
+.top-bar {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+}
+
+.top-bar-left { display: flex; align-items: center; gap: 16px; }
+.top-bar-right { display: flex; align-items: center; gap: 12px; }
+
+.logo-text {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--cyan);
+  letter-spacing: 2px;
+}
+
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-live { background: var(--green-dim); color: var(--green); }
+.status-demo { background: rgba(255,187,51,0.15); color: var(--amber); }
+
+/* === MAIN GRID === */
+.terminal-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 1fr 200px;
+  gap: 1px;
+  background: var(--border);
+  height: calc(100vh - 60px);
+}
+
+.terminal-grid > div {
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* === PANEL HEADER === */
+.panel-header {
+  background: var(--bg-panel);
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.panel-header .hotkey {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+/* === WATCHLIST === */
+.watchlist-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.watchlist-table th {
+  text-align: left;
+  padding: 4px 8px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+}
+.watchlist-table td { padding: 3px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.watchlist-table tr:hover { background: var(--bg-hover); }
+.watchlist-table tr.selected { background: rgba(0,255,255,0.08); }
+
+.sparkline { width: 60px; height: 16px; }
+
+/* === CHART PANEL === */
+.chart-panel { position: relative; }
+.chart-container {
+  flex: 1;
+  background: var(--bg);
+  position: relative;
+}
+
+.chart-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+}
+
+.chart-metric { display: flex; flex-direction: column; }
+.chart-metric-label { color: var(--text-dim); font-size: 9px; text-transform: uppercase; }
+.chart-metric-value { font-size: 14px; font-weight: 700; }
+
+/* === ORDER BOOK === */
+.orderbook-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.orderbook-table td { padding: 2px 8px; }
+.orderbook-bid { color: var(--green); }
+.orderbook-ask { color: var(--red); }
+.orderbook-bar { position: relative; }
+.orderbook-bar-bg {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  opacity: 0.15;
+}
+.orderbook-bar-bg.bid { right: 0; background: var(--green); }
+.orderbook-bar-bg.ask { left: 0; background: var(--red); }
+
+/* === TIME & SALES === */
+.tns-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.tns-table td { padding: 2px 8px; border-bottom: 1px solid var(--border); }
+.tns-time { color: var(--text-dim); }
+.tns-size { font-weight: 600; }
+
+/* === POSITIONS === */
+.pos-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.pos-table th { text-align: left; padding: 4px 8px; background: var(--bg-panel); border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.pos-table td { padding: 3px 8px; border-bottom: 1px solid var(--border); }
+.pos-table tr:hover { background: var(--bg-hover); }
+.pos-pnl { font-weight: 600; }
+
+/* === ACCOUNT BAR === */
+.account-bar {
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  padding: 4px 12px;
+  display: flex;
+  gap: 24px;
+  font-size: 11px;
+  align-items: center;
+}
+
+.account-item { display: flex; gap: 6px; }
+.account-label { color: var(--text-dim); }
+.account-value { font-weight: 700; }
+
+/* === ORDER ENTRY === */
+.order-entry {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.order-entry input, .order-entry select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.order-entry button {
+  padding: 4px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-buy { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-dim); }
+.btn-buy:hover { background: var(--green); color: var(--bg); }
+.btn-sell { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-dim); }
+.btn-sell:hover { background: var(--red); color: var(--bg); }
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* === RESPONSIVE === */
+@media (max-width: 1200px) {
+  .terminal-grid {
+    grid-template-columns: 200px 1fr 200px;
+  }
+}
+
+@media (max-width: 900px) {
+  .terminal-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+  }
+  .panel-right { display: none; }
+  .panel-left { max-height: 300px; }
+}
+
+@media (max-width: 600px) {
+  body { font-size: 10px; }
+  .ticker-tape { height: 28px; font-size: 10px; }
+  .top-bar { height: 24px; }
+  .terminal-grid { display: flex; flex-direction: column; }
+  .panel-left, .panel-right { display: none; }
+  .panel-center { flex: 1; }
+  .panel-bottom { max-height: 150px; }
+}
+
+/* === TABS === */
+.tab-bar {
+  display: flex;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 6px 16px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.tab:hover { background: var(--bg-hover); color: var(--text); }
+.tab.active { background: var(--bg); color: var(--cyan); border-bottom: 1px solid var(--cyan); }
+
+/* === MODAL === */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  min-width: 400px;
+  max-width: 90vw;
+}
+
+.modal-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-body { padding: 16px; }
+
+/* === KEYBOARD HINTS === */
+.keyboard-hints {
+  position: fixed;
+  bottom: 32px;
+  right: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+  z-index: 100;
+}
+
+.kb { 
+  display: inline-block; 
+  padding: 1px 4px; 
+  background: #222; 
+  border: 1px solid #333; 
+  border-radius: 2px; 
+  font-size: 9px;
+  margin: 0 2px;
+}
+
+/* === NEWS TICKER === */
+.news-ticker {
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--amber);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.news-ticker span { margin-right: 24px; }
+
+/* === HEATMAP === */
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+}
+
+.heatmap-cell {
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.heatmap-symbol { font-weight: 700; }
+.heatmap-pct { font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- TICKER TAPE -->
+<div class="ticker-tape" id="ticker">
+  <div class="ticker-item"><span class="ticker-symbol">AAPL</span><span class="ticker-price">182.50</span><span class="ticker-change up">+1.25</span><span class="ticker-pct">+0.69%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">MSFT</span><span class="ticker-price">335.80</span><span class="ticker-change up">+2.10</span><span class="ticker-pct">+0.63%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">GOOGL</span><span class="ticker-price">128.40</span><span class="ticker-change down">-0.85</span><span class="ticker-pct">-0.66%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">TSLA</span><span class="ticker-price">255.30</span><span class="ticker-change up">+5.20</span><span class="ticker-pct">+2.08%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">NVDA</span><span class="ticker-price">465.00</span><span class="ticker-change up">+8.40</span><span class="ticker-pct">+1.84%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">AMZN</span><span class="ticker-price">158.00</span><span class="ticker-change down">-1.20</span><span class="ticker-pct">-0.75%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">META</span><span class="ticker-price">510.00</span><span class="ticker-change up">+3.50</span><span class="ticker-pct">+0.69%</span></div>
+  <div class="ticker-item"><span class="ticker-symbol">AMD</span><span class="ticker-price">142.00</span><span class="ticker-change up">+2.80</span><span class="ticker-pct">+2.01%</span></div>
+</div>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="top-bar-left">
+    <span class="logo-text">DATS TERMINAL</span>
+    <span class="status-pill status-live">&#9679; LIVE</span>
+    <span style="color:var(--text-dim)">|</span>
+    <span style="color:var(--amber)">&#9733; DEMO MODE</span>
+  </div>
+  <div class="top-bar-right">
+    <span style="color:var(--text-dim)">Portfolio: <span style="color:var(--cyan);font-weight:700">$128,450.50</span></span>
+    <span style="color:var(--text-dim)">P&L: <span style="color:var(--green);font-weight:700">+$2,340.80</span></span>
+    <span style="color:var(--text-dim)">BP: <span style="color:var(--text);font-weight:700">$95,000</span></span>
+    <span style="color:var(--text-dim)">|</span>
+    <span id="clock" style="color:var(--text-dim)">--:--:--</span>
+  </div>
+</div>
+
+<!-- MAIN TERMINAL GRID -->
+<div class="terminal-grid">
+
+  <!-- LEFT: WATCHLIST -->
+  <div class="panel-left">
+    <div class="panel-header">
+      <span>Watchlist <span style="color:var(--text-dim)">[1]</span></span>
+      <span class="hotkey">F1</span>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      <table class="watchlist-table" id="watchlist">
+        <tr><th>Sym</th><th>Last</th><th>Chg%</th><th>Vol</th></tr>
+        <tr class="selected"><td><strong>AAPL</strong></td><td class="up">182.50</td><td class="up">+0.69</td><td>45.2M</td></tr>
+        <tr><td><strong>MSFT</strong></td><td class="up">335.80</td><td class="up">+0.63</td><td>22.1M</td></tr>
+        <tr><td><strong>GOOGL</strong></td><td class="down">128.40</td><td class="down">-0.66</td><td>18.7M</td></tr>
+        <tr><td><strong>TSLA</strong></td><td class="up">255.30</td><td class="up">+2.08</td><td>98.3M</td></tr>
+        <tr><td><strong>NVDA</strong></td><td class="up">465.00</td><td class="up">+1.84</td><td>52.1M</td></tr>
+        <tr><td><strong>AMZN</strong></td><td class="down">158.00</td><td class="down">-0.75</td><td>31.4M</td></tr>
+        <tr><td><strong>META</strong></td><td class="up">510.00</td><td class="up">+0.69</td><td>15.2M</td></tr>
+        <tr><td><strong>AMD</strong></td><td class="up">142.00</td><td class="up">+2.01</td><td>28.9M</td></tr>
+        <tr><td><strong>NFLX</strong></td><td class="up">685.20</td><td class="up">+1.12</td><td>8.3M</td></tr>
+        <tr><td><strong>SPY</strong></td><td class="up">445.30</td><td class="up">+0.45</td><td>52.8M</td></tr>
+        <tr><td><strong>QQQ</strong></td><td class="up">378.50</td><td class="up">+0.62</td><td>28.4M</td></tr>
+        <tr><td><strong>IWM</strong></td><td class="down">198.40</td><td class="down">-0.23</td><td>18.1M</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- CENTER: CHART + ORDER ENTRY -->
+  <div class="panel-center chart-panel">
+    <div class="panel-header">
+      <span>AAPL <span style="color:var(--text-dim)">- Apple Inc.</span> <span style="color:var(--green)">&#9650; +1.25 (+0.69%)</span></span>
+      <span class="hotkey">[2] Chart</span>
+    </div>
+    
+    <div class="chart-overlay">
+      <div class="chart-metric">
+        <span class="chart-metric-label">Open</span>
+        <span class="chart-metric-value">181.25</span>
+      </div>
+      <div class="chart-metric">
+        <span class="chart-metric-label">High</span>
+        <span class="chart-metric-value" style="color:var(--green)">183.80</span>
+      </div>
+      <div class="chart-metric">
+        <span class="chart-metric-label">Low</span>
+        <span class="chart-metric-value" style="color:var(--red)">180.90</span>
+      </div>
+      <div class="chart-metric">
+        <span class="chart-metric-label">Vol</span>
+        <span class="chart-metric-value">45.2M</span>
+      </div>
+      <div class="chart-metric">
+        <span class="chart-metric-label">Avg</span>
+        <span class="chart-metric-value">182.10</span>
+      </div>
+    </div>
+
+    <div class="chart-container" id="chart-area">
+      <svg viewBox="0 0 800 400" width="100%" height="100%" preserveAspectRatio="none" id="main-chart">
+        <!-- Grid lines -->
+        <g stroke="#111" stroke-width="1">
+          <line x1="0" y1="80" x2="800" y2="80"/>
+          <line x1="0" y1="160" x2="800" y2="160"/>
+          <line x1="0" y1="240" x2="800" y2="240"/>
+          <line x1="0" y1="320" x2="800" y2="320"/>
+        </g>
+        <!-- Price line -->
+        <polyline points="0,320 40,300 80,280 120,290 160,260 200,240 240,250 280,220 320,210 360,230 400,200 440,190 480,180 520,170 560,180 600,160 640,150 680,140 720,145 760,130 800,120" 
+          fill="none" stroke="#00ffff" stroke-width="1.5" opacity="0.8"/>
+        <!-- Area fill -->
+        <polygon points="0,320 40,300 80,280 120,290 160,260 200,240 240,250 280,220 320,210 360,230 400,200 440,190 480,180 520,170 560,180 600,160 640,150 680,140 720,145 760,130 800,120 800,400 0,400" 
+          fill="url(#chartGrad)" opacity="0.1"/>
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#00ffff"/>
+            <stop offset="100%" stop-color="#000000"/>
+          </linearGradient>
+        </defs>
+        <!-- VWAP -->
+        <polyline points="0,300 800,160" fill="none" stroke="#ffbb33" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+        <!-- Support/Resistance -->
+        <line x1="0" y1="120" x2="800" y2="120" stroke="#ff00ff" stroke-width="1" stroke-dasharray="2,2" opacity="0.5"/>
+        <text x="760" y="115" fill="#ff00ff" font-size="10" opacity="0.7">R1 185.00</text>
+        <line x1="0" y1="350" x2="800" y2="350" stroke="#00ff00" stroke-width="1" stroke-dasharray="2,2" opacity="0.5"/>
+        <text x="760" y="365" fill="#00ff00" font-size="10" opacity="0.7">S1 178.00</text>
+        <!-- Crosshair -->
+        <line x1="600" y1="0" x2="600" y2="400" stroke="#666" stroke-width="0.5" opacity="0.5"/>
+        <line x1="0" y1="160" x2="800" y2="160" stroke="#666" stroke-width="0.5" opacity="0.5"/>
+        <!-- Current price marker -->
+        <circle cx="800" cy="120" r="4" fill="#00ffff"/>
+        <rect x="740" y="112" width="55" height="16" fill="#00ffff" rx="2"/>
+        <text x="767" y="123" text-anchor="middle" fill="#000" font-size="10" font-weight="700">182.50</text>
+      </svg>
+    </div>
+
+    <!-- ORDER ENTRY -->
+    <div class="order-entry">
+      <select style="width:80px">
+        <option>AAPL</option>
+        <option>MSFT</option>
+        <option>GOOGL</option>
+        <option>TSLA</option>
+        <option>NVDA</option>
+      </select>
+      <select style="width:70px">
+        <option>BUY</option>
+        <option>SELL</option>
+      </select>
+      <input type="number" placeholder="Qty" value="100" style="width:60px">
+      <select style="width:80px">
+        <option>MARKET</option>
+        <option>LIMIT</option>
+        <option>STOP</option>
+      </select>
+      <input type="number" placeholder="Price" style="width:70px">
+      <button class="btn-buy">BUY</button>
+      <button class="btn-sell">SELL</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: ORDER BOOK + TIME & SALES -->
+  <div class="panel-right">
+    <div class="tab-bar">
+      <div class="tab active" onclick="showTab('orderbook')">Book</div>
+      <div class="tab" onclick="showTab('tns')">T&S</div>
+    </div>
+    
+    <div id="orderbook-panel" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div class="panel-header" style="border-top:none">
+        <span>Order Book <span style="color:var(--text-dim)">L2</span></span>
+        <span class="hotkey">[3]</span>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <table class="orderbook-table">
+          <tr><td class="orderbook-ask">183.20</td><td style="text-align:right">2,450</td></tr>
+          <tr><td class="orderbook-ask">183.15</td><td style="text-align:right">1,820</td></tr>
+          <tr><td class="orderbook-ask">183.10</td><td style="text-align:right">3,100</td></tr>
+          <tr><td class="orderbook-ask">183.05</td><td style="text-align:right">1,500</td></tr>
+          <tr><td class="orderbook-ask">183.00</td><td style="text-align:right">4,200</td></tr>
+          <tr style="background:rgba(255,255,255,0.03)"><td colspan="2" style="text-align:center;padding:4px;color:var(--text-dim);font-size:10px">SPREAD 0.05</td></tr>
+          <tr><td class="orderbook-bid">182.95</td><td style="text-align:right">3,800</td></tr>
+          <tr><td class="orderbook-bid">182.90</td><td style="text-align:right">2,100</td></tr>
+          <tr><td class="orderbook-bid">182.85</td><td style="text-align:right">5,400</td></tr>
+          <tr><td class="orderbook-bid">182.80</td><td style="text-align:right">1,900</td></tr>
+          <tr><td class="orderbook-bid">182.75</td><td style="text-align:right">6,200</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div id="tns-panel" style="flex:1;overflow:hidden;display:none;flex-direction:column">
+      <div class="panel-header" style="border-top:none">
+        <span>Time & Sales</span>
+        <span class="hotkey">[4]</span>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <table class="tns-table">
+          <tr><td class="tns-time">09:30:15</td><td>182.50</td><td class="tns-size up">500</td><td class="up">@ASK</td></tr>
+          <tr><td class="tns-time">09:30:12</td><td>182.48</td><td class="tns-size">200</td><td class="down">@BID</td></tr>
+          <tr><td class="tns-time">09:30:10</td><td>182.49</td><td class="tns-size up">1,200</td><td class="up">@ASK</td></tr>
+          <tr><td class="tns-time">09:30:08</td><td>182.47</td><td class="tns-size">800</td><td class="down">@BID</td></tr>
+          <tr><td class="tns-time">09:30:05</td><td>182.48</td><td class="tns-size up">350</td><td class="up">@ASK</td></tr>
+          <tr><td class="tns-time">09:30:02</td><td>182.46</td><td class="tns-size">600</td><td class="down">@BID</td></tr>
+          <tr><td class="tns-time">09:30:00</td><td>182.47</td><td class="tns-size up">2,100</td><td class="up">@ASK</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: POSITIONS + ACCOUNT -->
+  <div class="panel-bottom" style="grid-column:1/-1;display:flex;flex-direction:column">
+    <div class="tab-bar">
+      <div class="tab active" onclick="showBottomTab('positions')">Positions [5]</div>
+      <div class="tab" onclick="showBottomTab('orders')">Orders [6]</div>
+      <div class="tab" onclick="showBottomTab('ai')">AI Signals [7]</div>
+      <div class="tab" onclick="showBottomTab('risk')">Risk [8]</div>
+    </div>
+
+    <div id="bottom-positions" style="flex:1;overflow:auto">
+      <table class="pos-table">
+        <tr>
+          <th>Symbol</th><th>Side</th><th>Qty</th><th>Avg</th><th>Mark</th><th>Day P&L</th><th>Total P&L</th><th>Margin</th>
+        </tr>
+        <tr>
+          <td><strong>AAPL</strong></td><td>LONG</td><td>50</td><td>175.20</td><td>182.50</td>
+          <td class="pos-pnl up">+$365.00</td><td class="pos-pnl up">+$365.00</td><td>$4,380</td>
+        </tr>
+        <tr>
+          <td><strong>MSFT</strong></td><td>LONG</td><td>30</td><td>320.00</td><td>335.80</td>
+          <td class="pos-pnl up">+$474.00</td><td class="pos-pnl up">+$474.00</td><td>$5,037</td>
+        </tr>
+        <tr>
+          <td><strong>GOOGL</strong></td><td>LONG</td><td>25</td><td>130.00</td><td>128.40</td>
+          <td class="pos-pnl down">-$40.00</td><td class="pos-pnl down">-$40.00</td><td>$1,605</td>
+        </tr>
+        <tr>
+          <td><strong>TSLA</strong></td><td>LONG</td><td>20</td><td>240.00</td><td>255.30</td>
+          <td class="pos-pnl up">+$306.00</td><td class="pos-pnl up">+$306.00</td><td>$3,060</td>
+        </tr>
+        <tr style="background:var(--bg-panel);font-weight:700">
+          <td colspan="5" style="text-align:right">TOTAL</td>
+          <td class="up">+$1,105.00</td><td class="up">+$1,105.00</td><td>$14,082</td>
+        </tr>
+      </table>
+    </div>
+
+    <div id="bottom-orders" style="flex:1;overflow:auto;display:none">
+      <table class="pos-table">
+        <tr><th>ID</th><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th></tr>
+        <tr><td>ORD-001</td><td>09:30:15</td><td>AAPL</td><td>BUY</td><td>MKT</td><td>50</td><td>182.50</td><td style="color:var(--green)">FILLED</td></tr>
+        <tr><td>ORD-002</td><td>09:35:22</td><td>MSFT</td><td>BUY</td><td>LMT</td><td>30</td><td>320.00</td><td style="color:var(--green)">FILLED</td></tr>
+        <tr><td>ORD-003</td><td>10:15:08</td><td>GOOGL</td><td>BUY</td><td>MKT</td><td>25</td><td>130.00</td><td style="color:var(--green)">FILLED</td></tr>
+        <tr><td>ORD-004</td><td>11:00:45</td><td>TSLA</td><td>BUY</td><td>MKT</td><td>20</td><td>240.00</td><td style="color:var(--green)">FILLED</td></tr>
+        <tr><td>ORD-005</td><td>14:30:10</td><td>NVDA</td><td>SELL</td><td>LMT</td><td>15</td><td>465.00</td><td style="color:var(--green)">FILLED</td></tr>
+      </table>
+    </div>
+
+    <div id="bottom-ai" style="flex:1;overflow:auto;display:none;padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div style="background:var(--bg-panel);padding:12px;border-left:3px solid var(--green)">
+          <div style="display:flex;justify-content:space-between"><strong>AMD</strong><span style="color:var(--green);font-weight:700">BUY</span></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:4px">Confidence: 82% | Momentum Alpha</div>
+          <div style="color:var(--text-dim);font-size:10px">Target: $155 | Stop: $132</div>
+        </div>
+        <div style="background:var(--bg-panel);padding:12px;border-left:3px solid var(--green)">
+          <div style="display:flex;justify-content:space-between"><strong>AAPL</strong><span style="color:var(--green);font-weight:700">BUY</span></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:4px">Confidence: 87% | Momentum Alpha</div>
+          <div style="color:var(--text-dim);font-size:10px">In position | Holding</div>
+        </div>
+        <div style="background:var(--bg-panel);padding:12px;border-left:3px solid var(--red)">
+          <div style="display:flex;justify-content:space-between"><strong>NVDA</strong><span style="color:var(--red);font-weight:700">SELL</span></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:4px">Confidence: 78% | Trend Following</div>
+          <div style="color:var(--text-dim);font-size:10px">Exited @ $465 | +$675</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bottom-risk" style="flex:1;overflow:auto;display:none;padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+        <div>
+          <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase">Max Drawdown</div>
+          <div style="font-size:18px;font-weight:700;color:var(--green)">2.4%</div>
+          <div style="width:100%;height:4px;background:var(--bg-panel);margin-top:4px"><div style="width:24%;height:100%;background:var(--green)"></div></div>
+        </div>
+        <div>
+          <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase">Daily Loss</div>
+          <div style="font-size:18px;font-weight:700;color:var(--green)">1.8%</div>
+          <div style="width:100%;height:4px;background:var(--bg-panel);margin-top:4px"><div style="width:36%;height:100%;background:var(--green)"></div></div>
+        </div>
+        <div>
+          <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase">Kill Switch</div>
+          <div style="font-size:18px;font-weight:700;color:var(--amber)">ARMED</div>
+        </div>
+        <div>
+          <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase">Margin Used</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text)">5.0%</div>
+          <div style="width:100%;height:4px;background:var(--bg-panel);margin-top:4px"><div style="width:5%;height:100%;background:var(--amber)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT BAR -->
+    <div class="account-bar">
+      <div class="account-item"><span class="account-label">ACCT:</span><span class="account-value" style="color:var(--cyan)">DEMO-001</span></div>
+      <div class="account-item"><span class="account-label">EQ:</span><span class="account-value">$128,450.50</span></div>
+      <div class="account-item"><span class="account-label">BP:</span><span class="account-value" style="color:var(--green)">$95,000.00</span></div>
+      <div class="account-item"><span class="account-label">MARGIN:</span><span class="account-value">$14,082</span></div>
+      <div class="account-item"><span class="account-label">DAY P&L:</span><span class="account-value" style="color:var(--green)">+$2,340.80</span></div>
+      <div class="account-item"><span class="account-label">TOTAL P&L:</span><span class="account-value" style="color:var(--green)">+$28,450.50</span></div>
+      <div class="account-item"><span class="account-label">OPEN:</span><span class="account-value">4</span></div>
+      <div style="flex:1"></div>
+      <div class="account-item"><span class="account-label" style="color:var(--amber)">&#9733; DEMO</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- NEWS TICKER -->
+<div class="news-ticker">
+  <span><strong style="color:var(--text-dim)">NEWS:</strong></span>
+  <span>AAPL beats Q3 earnings estimates, raises guidance...</span>
+  <span>Fed signals potential rate pause in September meeting...</span>
+  <span>NVDA announces new AI chip architecture, stock rallies...</span>
+  <span>Crypto markets stabilize after volatile week...</span>
+  <span>Oil prices retreat on demand concerns...</span>
+</div>
+
+<!-- KEYBOARD SHORTCUTS HINT -->
+<div class="keyboard-hints" id="kb-hints">
+  <span class="kb">1</span>Watchlist 
+  <span class="kb">2</span>Chart 
+  <span class="kb">3</span>Book 
+  <span class="kb">4</span>T&S 
+  <span class="kb">5</span>Pos 
+  <span class="kb">6</span>Ord 
+  <span class="kb">7</span>AI 
+  <span class="kb">8</span>Risk 
+  <span class="kb">B</span>Buy 
+  <span class="kb">S</span>Sell 
+  <span class="kb">?</span>Help
+</div>
+
+<script>
+function showTab(name) {
+  document.getElementById('orderbook-panel').style.display = name === 'orderbook' ? 'flex' : 'none';
+  document.getElementById('tns-panel').style.display = name === 'tns' ? 'flex' : 'none';
+}
+
+function showBottomTab(name) {
+  ['positions','orders','ai','risk'].forEach(t => {
+    document.getElementById('bottom-' + t).style.display = t === name ? 'block' : 'none';
+  });
+}
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
+}, 1000);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  switch(e.key) {
+    case '1': document.querySelector('.panel-left').scrollIntoView({behavior:'smooth'}); break;
+    case '2': document.querySelector('.panel-center').scrollIntoView({behavior:'smooth'}); break;
+    case '3': showTab('orderbook'); break;
+    case '4': showTab('tns'); break;
+    case '5': showBottomTab('positions'); break;
+    case '6': showBottomTab('orders'); break;
+    case '7': showBottomTab('ai'); break;
+    case '8': showBottomTab('risk'); break;
+    case 'b': case 'B': alert('BUY order entry (demo)'); break;
+    case 's': case 'S': alert('SELL order entry (demo)'); break;
+    case '?': document.getElementById('kb-hints').style.display = document.getElementById('kb-hints').style.display === 'none' ? 'block' : 'none'; break;
+  }
+});
+</script>
+
+</body>
+</html>

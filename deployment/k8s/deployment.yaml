@@ -1,0 +1,170 @@
+---
+# DATS-BETA-CANDIDATE Deployment
+# Purpose: Defines the FastAPI application workload.
+# Replicas: 2 (minimum for HA). Adjust via HPA or manually as needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dats-beta-candidate
+  namespace: dats-beta-candidate
+  labels:
+    app.kubernetes.io/name: dats-beta-candidate
+    app.kubernetes.io/component: api
+    app.kubernetes.io/version: "1.0.0-beta"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dats-beta-candidate
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dats-beta-candidate
+        app.kubernetes.io/component: api
+        app.kubernetes.io/version: "1.0.0-beta"
+      annotations:
+        # Force redeploy on config/secret changes
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+        checksum/secrets: "{{ include (print $.Template.BasePath \"/secret.yaml\") . | sha256sum }}"
+    spec:
+      # Optional: run on specific nodes
+      # nodeSelector:
+      #   workload-type: trading
+      
+      # Optional: tolerations for tainted nodes
+      # tolerations:
+      #   - key: "dedicated"
+      #     operator: "Equal"
+      #     value: "trading"
+      #     effect: "NoSchedule"
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: api
+          image: dats-beta-candidate:1.0.0-beta
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: dats-beta-candidate-config
+          
+          env:
+            # Inject secrets individually so they are not logged
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: REDIS_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: SECRET_KEY
+            - name: MARKET_DATA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: MARKET_DATA_API_KEY
+            - name: BROKER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: BROKER_API_KEY
+            - name: BROKER_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: BROKER_API_SECRET
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dats-beta-candidate-secrets
+                  key: OPENAI_API_KEY
+          
+          # Liveness probe — restart container if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe — remove from service endpoints if not ready
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          # Startup probe — give slow-start containers time before liveness/readiness kick in
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12  # 12 * 5s = 60s max startup time
+          
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # Set true if app does not need to write to disk
+            capabilities:
+              drop:
+                - ALL
+      
+      # Optional: init container for database migrations
+      # initContainers:
+      #   - name: migrate
+      #     image: dats-beta-candidate:1.0.0-beta
+      #     command: ["python", "-m", "alembic", "upgrade", "head"]
+      #     envFrom:
+      #       - configMapRef:
+      #           name: dats-beta-candidate-config
+      #     env:
+      #       - name: DATABASE_URL
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: dats-beta-candidate-secrets
+      #             key: DATABASE_URL
+      #     resources:
+      #       requests:
+      #         memory: "128Mi"
+      #         cpu: "100m"
+      #       limits:
+      #         memory: "256Mi"
+      #         cpu: "250m"

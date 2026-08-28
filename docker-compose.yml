@@ -1,0 +1,86 @@
+# DATS Beta — Docker Compose orchestration
+# Secrets and credentials are injected via environment variables with
+# development-safe defaults. Override in production:  DB_PASSWORD=... docker compose up -d
+
+services:
+  dats:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dats-beta
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=dats
+      - APP_VERSION=1.0.0-beta
+      - APP_DEBUG=false
+      - APP_ENV=production
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-dats}
+      - DB_PASSWORD=${DB_PASSWORD:-dats}
+      - DB_NAME=${DB_NAME:-dats}
+      - DB_SSL_MODE=prefer
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - METRICS_ENABLED=true
+      - TRADING_PAPER_TRADING=true
+      - SECURITY_JWT_SECRET=${SECURITY_JWT_SECRET:-change-me-in-production-use-strong-secret-min-32-chars}
+      - SECURITY_TOKEN_EXPIRY_MINUTES=${SECURITY_TOKEN_EXPIRY_MINUTES:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - dats-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: dats-db
+    environment:
+      - POSTGRES_USER=${DB_USER:-dats}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-dats}
+      - POSTGRES_DB=${DB_NAME:-dats}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - dats-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dats} -d ${DB_NAME:-dats}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dats-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - dats-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  dats-network:
+    driver: bridge

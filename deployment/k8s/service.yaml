@@ -1,0 +1,28 @@
+---
+# DATS-BETA-CANDIDATE Service
+# Purpose: Exposes the FastAPI Deployment internally within the cluster.
+# Type: ClusterIP (use Ingress or port-forward for external access).
+apiVersion: v1
+kind: Service
+metadata:
+  name: dats-beta-candidate
+  namespace: dats-beta-candidate
+  labels:
+    app.kubernetes.io/name: dats-beta-candidate
+    app.kubernetes.io/component: service
+  annotations:
+    # Optional: Prometheus service scraping annotation
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/health/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dats-beta-candidate
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None

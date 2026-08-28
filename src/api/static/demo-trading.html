@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DATS | Trading Workspace</title>
+<style>
+body { background: #0a0e1a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; }
+.sidebar { width: 220px; background: #111827; border-right: 1px solid #2a3456; position: fixed; top: 0; left: 0; height: 100vh; display: flex; flex-direction: column; }
+.sidebar-header { padding: 16px 20px; border-bottom: 1px solid #2a3456; }
+.sidebar-header h2 { font-size: 18px; font-weight: 700; letter-spacing: 1px; background: linear-gradient(90deg, #3b82f6, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; }
+.sidebar-header .version { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+.nav-menu { flex: 1; padding: 12px 8px; }
+.nav-item { display: flex; align-items: center; padding: 10px 16px; border-radius: 8px; color: #94a3b8; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 2px; text-decoration: none; }
+.nav-item:hover { background: #232b45; color: #e2e8f0; }
+.nav-item.active { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.nav-item .icon { width: 20px; margin-right: 12px; text-align: center; }
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid #2a3456; font-size: 11px; color: #94a3b8; }
+.user-info { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #8b5cf6); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.main-content { margin-left: 220px; min-height: 100vh; }
+.topbar { height: 56px; background: #111827; border-bottom: 1px solid #2a3456; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+.topbar-title { font-size: 16px; font-weight: 600; }
+.content-area { padding: 20px; }
+.grid { display: grid; gap: 16px; }
+.grid-4 { grid-template-columns: 280px 1fr 1fr 280px; }
+.card { background: #1a2035; border: 1px solid #2a3456; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.card-title { font-size: 14px; font-weight: 600; }
+.card-subtitle { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; border-bottom: 1px solid #2a3456; }
+.data-table td { padding: 10px; font-size: 13px; border-bottom: 1px solid #2a3456; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+.badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.badge-blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.badge-orange { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.badge-gray { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.btn-small { padding: 6px 14px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.btn-green { background: #10b981; color: white; }
+.btn-red { background: #ef4444; color: white; }
+.watchlist-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #2a3456; cursor: pointer; }
+.watchlist-item:hover { background: #232b45; }
+.watchlist-item.selected { background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; }
+.watchlist-symbol { font-size: 14px; font-weight: 700; }
+.watchlist-price { font-size: 14px; font-weight: 600; text-align: right; }
+.watchlist-change { font-size: 11px; text-align: right; }
+.chart-container { width: 100%; height: 300px; background: #0a0e1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.progress-bar { width: 100%; height: 6px; background: #0a0e1a; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.progress-fill { height: 100%; border-radius: 3px; }
+.demo-banner { background: linear-gradient(90deg, rgba(245,158,11,0.2), rgba(245,158,11,0.05)); border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 20px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.demo-banner-text { color: #f59e0b; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="app-container" style="display:flex">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>DATS</h2>
+      <div class="version">BETA v1.0.0</div>
+    </div>
+    <nav class="nav-menu">
+      <a href="demo.html" class="nav-item"><span class="icon">&#9638;</span><span>Dashboard</span></a>
+      <a href="demo-trading.html" class="nav-item active"><span class="icon">&#9650;</span><span>Trading</span></a>
+      <a href="demo-ai.html" class="nav-item"><span class="icon">&#9733;</span><span>AI Center</span></a>
+      <a href="demo-paper.html" class="nav-item"><span class="icon">&#9878;</span><span>Paper Trading</span></a>
+      <a href="demo-health.html" class="nav-item"><span class="icon">&#9881;</span><span>System Health</span></a>
+      <a href="demo-reports.html" class="nav-item"><span class="icon">&#9636;</span><span>Reports</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">D</div>
+        <div><div style="font-size:12px;font-weight:600">Demo User</div><div style="font-size:10px;color:#94a3b8">ADMIN</div></div>
+      </div>
+      <div style="color:#f59e0b;font-weight:600">&#9733; DEMO MODE</div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title">Trading Workspace</div>
+      <div style="font-size:12px;color:#94a3b8">04:55:33</div>
+    </header>
+
+    <div class="content-area">
+      <div class="demo-banner">
+        <span class="demo-banner-text">&#9733; DEMO MODE &mdash; Sample data for demonstration</span>
+        <a href="/" style="color:#f59e0b;font-size:12px">Exit to Login</a>
+      </div>
+
+      <div class="grid grid-4">
+        <div>
+          <div class="card" style="height:calc(100vh - 180px);overflow-y:auto">
+            <div class="card-header"><div class="card-title">Watchlist</div></div>
+            <div class="watchlist-item selected"><div><div class="watchlist-symbol">AAPL</div><div style="font-size:11px;color:#94a3b8">&#9650; 1.25</div></div><div><div class="watchlist-price">$182.50</div><div class="watchlist-change" style="color:#10b981">+0.69%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">MSFT</div><div style="font-size:11px;color:#94a3b8">&#9650; 2.10</div></div><div><div class="watchlist-price">$335.80</div><div class="watchlist-change" style="color:#10b981">+0.63%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">GOOGL</div><div style="font-size:11px;color:#94a3b8">&#9660; 0.85</div></div><div><div class="watchlist-price">$128.40</div><div class="watchlist-change" style="color:#ef4444">-0.66%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">TSLA</div><div style="font-size:11px;color:#94a3b8">&#9650; 5.20</div></div><div><div class="watchlist-price">$255.30</div><div class="watchlist-change" style="color:#10b981">+2.08%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">NVDA</div><div style="font-size:11px;color:#94a3b8">&#9650; 8.40</div></div><div><div class="watchlist-price">$465.00</div><div class="watchlist-change" style="color:#10b981">+1.84%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">AMZN</div><div style="font-size:11px;color:#94a3b8">&#9660; 1.20</div></div><div><div class="watchlist-price">$158.00</div><div class="watchlist-change" style="color:#ef4444">-0.75%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">META</div><div style="font-size:11px;color:#94a3b8">&#9650; 3.50</div></div><div><div class="watchlist-price">$510.00</div><div class="watchlist-change" style="color:#10b981">+0.69%</div></div></div>
+            <div class="watchlist-item"><div><div class="watchlist-symbol">AMD</div><div style="font-size:11px;color:#94a3b8">&#9650; 2.80</div></div><div><div class="watchlist-price">$142.00</div><div class="watchlist-change" style="color:#10b981">+2.01%</div></div></div>
+          </div>
+        </div>
+
+        <div style="grid-column:2/4">
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-header">
+              <div><div class="card-title">AAPL</div><div class="card-subtitle">$182.50 <span style="color:#10b981">+0.69%</span></div></div>
+              <div style="display:flex;gap:8px"><button class="btn-small btn-green">BUY</button><button class="btn-small btn-red">SELL</button></div>
+            </div>
+            <div class="chart-container">
+              <svg viewBox="0 0 600 300" width="100%" height="100%" preserveAspectRatio="none">
+                <defs><linearGradient id="c1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+                <polygon points="0,300 0,280 30,260 60,270 90,240 120,220 150,230 180,200 210,190 240,210 270,180 300,160 330,170 360,140 390,150 420,120 450,110 480,130 510,100 540,90 570,80 600,70 600,300" fill="url(#c1)"/>
+                <polyline points="0,280 30,260 60,270 90,240 120,220 150,230 180,200 210,190 240,210 270,180 300,160 330,170 360,140 390,150 420,120 450,110 480,130 510,100 540,90 570,80 600,70" fill="none" stroke="#3b82f6" stroke-width="2"/>
+                <line x1="0" y1="180" x2="600" y2="180" stroke="#f59e0b" stroke-width="1" stroke-dasharray="5,5"/>
+                <text x="10" y="175" fill="#f59e0b" font-size="12">Resistance $185</text>
+                <line x1="0" y1="250" x2="600" y2="250" stroke="#10b981" stroke-width="1" stroke-dasharray="5,5"/>
+                <text x="10" y="265" fill="#10b981" font-size="12">Support $178</text>
+              </svg>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid #2a3456">
+              <div style="padding:10px 20px;font-size:13px;font-weight:600;color:#3b82f6;border-bottom:2px solid #3b82f6">Orders</div>
+              <div style="padding:10px 20px;font-size:13px;font-weight:600;color:#94a3b8">Positions</div>
+              <div style="padding:10px 20px;font-size:13px;font-weight:600;color:#94a3b8">Closed</div>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>ID</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th><th>Time</th></tr></thead>
+              <tbody>
+                <tr><td>ORD-001</td><td><strong>AAPL</strong></td><td><span class="badge badge-green">BUY</span></td><td>MARKET</td><td>50</td><td>$182.50</td><td><span class="badge badge-green">FILLED</span></td><td>09:30:15</td></tr>
+                <tr><td>ORD-002</td><td><strong>MSFT</strong></td><td><span class="badge badge-green">BUY</span></td><td>LIMIT</td><td>30</td><td>$320.00</td><td><span class="badge badge-green">FILLED</span></td><td>09:35:22</td></tr>
+                <tr><td>ORD-003</td><td><strong>GOOGL</strong></td><td><span class="badge badge-green">BUY</span></td><td>MARKET</td><td>25</td><td>$130.00</td><td><span class="badge badge-green">FILLED</span></td><td>10:15:08</td></tr>
+                <tr><td>ORD-004</td><td><strong>TSLA</strong></td><td><span class="badge badge-green">BUY</span></td><td>MARKET</td><td>20</td><td>$240.00</td><td><span class="badge badge-green">FILLED</span></td><td>11:00:45</td></tr>
+                <tr><td>ORD-005</td><td><strong>NVDA</strong></td><td><span class="badge badge-red">SELL</span></td><td>LIMIT</td><td>15</td><td>$465.00</td><td><span class="badge badge-green">FILLED</span></td><td>14:30:10</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-header"><div class="card-title">Risk Panel</div></div>
+            <div style="padding:10px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Max Drawdown</span><strong>10.0%</strong></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:24%;background:#3b82f6"></div></div>
+            </div>
+            <div style="padding:10px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Daily Loss Limit</span><strong>5.0%</strong></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:36%;background:#10b981"></div></div>
+            </div>
+            <div style="padding:10px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Consecutive Losses</span><strong>0/5</strong></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:0%;background:#10b981"></div></div>
+            </div>
+            <div style="padding:10px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Margin Used</span><strong>5.0%</strong></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:5%;background:#f59e0b"></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">AI Decisions</div></div>
+            <div style="padding:10px;border-bottom:1px solid #2a3456"><div style="display:flex;justify-content:space-between"><strong>AAPL</strong><span class="badge badge-green">BUY</span></div><div style="font-size:12px;color:#94a3b8">Confidence: 87% | Momentum Alpha</div></div>
+            <div style="padding:10px;border-bottom:1px solid #2a3456"><div style="display:flex;justify-content:space-between"><strong>MSFT</strong><span class="badge badge-green">BUY</span></div><div style="font-size:12px;color:#94a3b8">Confidence: 72% | Mean Reversion</div></div>
+            <div style="padding:10px;border-bottom:1px solid #2a3456"><div style="display:flex;justify-content:space-between"><strong>TSLA</strong><span class="badge badge-green">BUY</span></div><div style="font-size:12px;color:#94a3b8">Confidence: 91% | Momentum Alpha</div></div>
+            <div style="padding:10px"><div style="display:flex;justify-content:space-between"><strong>NVDA</strong><span class="badge badge-red">SELL</span></div><div style="font-size:12px;color:#94a3b8">Confidence: 78% | Trend Following</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

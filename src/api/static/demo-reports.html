@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DATS | Reports</title>
+<style>
+body{background:#0a0e1a;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;margin:0}
+.sidebar{width:220px;background:#111827;border-right:1px solid #2a3456;position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column}
+.sidebar-header{padding:16px 20px;border-bottom:1px solid #2a3456}
+.sidebar-header h2{font-size:18px;font-weight:700;letter-spacing:1px;background:linear-gradient(90deg,#3b82f6,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:0}
+.nav-menu{flex:1;padding:12px 8px}
+.nav-item{display:flex;align-items:center;padding:10px 16px;border-radius:8px;color:#94a3b8;font-size:13px;font-weight:500;text-decoration:none;margin-bottom:2px}
+.nav-item:hover{background:#232b45;color:#e2e8f0}
+.nav-item.active{background:rgba(59,130,246,0.15);color:#3b82f6}
+.nav-item .icon{width:20px;margin-right:12px;text-align:center}
+.sidebar-footer{padding:12px 16px;border-top:1px solid #2a3456;font-size:11px;color:#94a3b8}
+.user-info{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.main-content{margin-left:220px;min-height:100vh}
+.topbar{height:56px;background:#111827;border-bottom:1px solid #2a3456;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.topbar-title{font-size:16px;font-weight:600}
+.content-area{padding:24px}
+.card{background:#1a2035;border:1px solid #2a3456;border-radius:12px;padding:20px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600}
+.card-subtitle{font-size:11px;color:#94a3b8;margin-top:2px}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(16,185,129,0.15);color:#10b981}
+.btn-small{padding:6px 14px;font-size:12px;border-radius:6px;border:none;cursor:pointer;font-weight:600}
+.btn-blue{background:#3b82f6;color:white}
+.demo-banner{background:linear-gradient(90deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05));border:1px solid #f59e0b;border-radius:8px;padding:12px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between}
+.demo-banner-text{color:#f59e0b;font-size:13px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div style="display:flex">
+<aside class="sidebar">
+<div class="sidebar-header"><h2>DATS</h2><div style="font-size:10px;color:#94a3b8">BETA v1.0.0</div></div>
+<nav class="nav-menu">
+<a href="demo.html" class="nav-item"><span class="icon">&#9638;</span>Dashboard</a>
+<a href="demo-trading.html" class="nav-item"><span class="icon">&#9650;</span>Trading</a>
+<a href="demo-ai.html" class="nav-item"><span class="icon">&#9733;</span>AI Center</a>
+<a href="demo-paper.html" class="nav-item"><span class="icon">&#9878;</span>Paper Trading</a>
+<a href="demo-health.html" class="nav-item"><span class="icon">&#9881;</span>System Health</a>
+<a href="demo-reports.html" class="nav-item active"><span class="icon">&#9636;</span>Reports</a>
+</nav>
+<div class="sidebar-footer">
+<div class="user-info"><div class="user-avatar">D</div><div><div style="font-size:12px;font-weight:600">Demo User</div><div style="font-size:10px;color:#94a3b8">ADMIN</div></div></div>
+<div style="color:#f59e0b;font-weight:600">&#9733; DEMO MODE</div>
+</div>
+</aside>
+
+<main class="main-content">
+<header class="topbar"><div class="topbar-title">Reports</div><div style="font-size:12px;color:#94a3b8">04:55:33</div></header>
+
+<div class="content-area">
+<div class="demo-banner"><span class="demo-banner-text">&#9733; DEMO MODE</span><a href="/" style="color:#f59e0b;font-size:12px">Exit to Login</a></div>
+
+<div class="card">
+<div class="card-header"><div><div class="card-title">Generated Reports</div><div class="card-subtitle">Download operational reports</div></div></div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #2a3456">
+<div><div style="font-weight:600;font-size:14px">Daily Performance Report</div><div style="font-size:12px;color:#94a3b8">2026-08-12 &bull; DAILY</div></div>
+<div style="display:flex;gap:8px"><span class="badge badge-green">READY</span><button class="btn-small btn-blue">Download</button></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #2a3456">
+<div><div style="font-weight:600;font-size:14px">Weekly Strategy Report</div><div style="font-size:12px;color:#94a3b8">2026-08-11 &bull; WEEKLY</div></div>
+<div style="display:flex;gap:8px"><span class="badge badge-green">READY</span><button class="btn-small btn-blue">Download</button></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #2a3456">
+<div><div style="font-weight:600;font-size:14px">Decision Audit Report</div><div style="font-size:12px;color:#94a3b8">2026-08-12 &bull; DECISION</div></div>
+<div style="display:flex;gap:8px"><span class="badge badge-green">READY</span><button class="btn-small btn-blue">Download</button></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #2a3456">
+<div><div style="font-weight:600;font-size:14px">Risk Assessment Report</div><div style="font-size:12px;color:#94a3b8">2026-08-12 &bull; RISK</div></div>
+<div style="display:flex;gap:8px"><span class="badge badge-green">READY</span><button class="btn-small btn-blue">Download</button></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:16px">
+<div><div style="font-weight:600;font-size:14px">Platform Performance Report</div><div style="font-size:12px;color:#94a3b8">2026-08-12 &bull; PERFORMANCE</div></div>
+<div style="display:flex;gap:8px"><span class="badge badge-green">READY</span><button class="btn-small btn-blue">Download</button></div>
+</div>
+
+</div>
+</div>
+</main>
+</div>
+
+</body>
+</html>

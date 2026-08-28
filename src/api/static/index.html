@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DATS | Institutional AI Trading Platform</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<!-- ==================== LOGIN SCREEN ==================== -->
+<div class="login-container">
+  <div class="login-box">
+    <div class="login-logo">
+      <h1>DATS</h1>
+      <p>Institutional AI Trading Platform</p>
+      <p style="font-size:10px;color:var(--text-secondary);margin-top:8px">BETA v1.0.0</p>
+    </div>
+    <form id="login-form">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="admin" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="admin" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn" id="login-btn">Sign In</button>
+      <div id="login-error" class="error-msg"></div>
+    </form>
+    <div style="text-align:center;margin-top:20px">
+      <a href="/static/demo.html" class="btn btn-secondary" style="display:inline-block;text-decoration:none">Launch Demo Mode</a>
+      <div class="demo-badge">&#9733; PRE-POPULATED DATA</div>
+    </div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color)">
+      <p style="font-size:11px;color:var(--text-secondary);text-align:center">Default credentials: admin / admin</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== APP CONTAINER ==================== -->
+<div class="app-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>DATS</h2>
+      <div class="version">BETA v1.0.0</div>
+    </div>
+    <nav class="nav-menu">
+      <div class="nav-item active" data-screen="dashboard"><span class="icon">&#9638;</span><span>Dashboard</span></div>
+      <div class="nav-item" data-screen="trading"><span class="icon">&#9650;</span><span>Trading</span></div>
+      <div class="nav-item" data-screen="ai-center"><span class="icon">&#9733;</span><span>AI Center</span></div>
+      <div class="nav-item" data-screen="paper-trading"><span class="icon">&#9878;</span><span>Paper Trading</span></div>
+      <div class="nav-item" data-screen="health"><span class="icon">&#9881;</span><span>System Health</span></div>
+      <div class="nav-item" data-screen="reports"><span class="icon">&#9636;</span><span>Reports</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div>
+          <div style="font-size:12px;font-weight:600" id="user-name">User</div>
+          <div style="font-size:10px;color:var(--text-secondary)" id="user-role">VIEWER</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <label class="demo-toggle"><input type="checkbox" id="demo-toggle"> Demo</label>
+      </div>
+      <div style="margin-top:8px;cursor:pointer;color:var(--text-secondary)" id="logout-btn">&#8592; Logout</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-actions">
+        <div class="status-indicator"><span class="status-dot"></span>Live</div>
+        <div style="font-size:12px;color:var(--text-secondary)" id="clock">--:--:--</div>
+      </div>
+    </header>
+
+    <div class="content-area">
+
+      <!-- ===== DASHBOARD ===== -->
+      <div class="screen active" id="screen-dashboard">
+        <div class="grid grid-4">
+          <div class="stat-card"><div class="stat-label">Portfolio Value</div><div class="stat-value" id="stat-portfolio-value">$0.00</div></div>
+          <div class="stat-card"><div class="stat-label">Day P&L</div><div class="stat-value" id="stat-day-pnl">$0.00</div><div class="stat-change" id="stat-day-pnl-change">0.00%</div></div>
+          <div class="stat-card"><div class="stat-label">Total P&L</div><div class="stat-value" id="stat-total-pnl">$0.00</div><div class="stat-change" id="stat-total-pnl-change">0.00%</div></div>
+          <div class="stat-card"><div class="stat-label">Buying Power</div><div class="stat-value" id="stat-buying-power">$0.00</div></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Equity Curve</div><div class="card-subtitle">Cumulative portfolio value</div></div></div>
+            <div class="chart-container" id="equity-chart" style="height:280px"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Open Positions</div><div class="card-subtitle">Real-time position tracking</div></div><div style="font-size:24px;font-weight:700" id="stat-positions-count">0</div></div>
+            <table class="data-table"><thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Avg</th><th>Current</th><th>P&L</th></tr></thead><tbody id="positions-body"><tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No positions</td></tr></tbody></table>
+          </div>
+        </div>
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Active Strategies</div><div class="card-subtitle">Strategy performance</div></div></div>
+            <div id="strategies-body"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Risk Status</div><div class="card-subtitle">Real-time risk metrics</div></div><span class="badge badge-green" id="risk-status">NORMAL</span></div>
+            <div class="health-item"><div class="health-name">Kill Switch</div><div class="health-status healthy" id="kill-switch">DISARMED</div></div>
+            <div class="health-item"><div class="health-name">Max Drawdown</div><div class="health-status healthy" id="max-drawdown">0.0%</div></div>
+            <div class="health-item"><div class="health-name">Daily Loss</div><div class="health-status healthy" id="daily-loss">0.0%</div></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">AI & Market Status</div></div></div>
+            <div class="health-item"><div class="health-name">AI Engine</div><div class="health-status healthy" id="ai-status">OFFLINE</div></div>
+            <div class="health-item"><div class="health-name">Decisions Today</div><div class="health-status healthy" id="ai-decisions">0</div></div>
+            <div class="health-item"><div class="health-name">Avg Confidence</div><div class="health-status healthy" id="ai-confidence">0%</div></div>
+            <div class="health-item"><div class="health-name">Market</div><div class="health-status healthy" id="market-status">CLOSED</div></div>
+            <div class="health-item"><div class="health-name">Market Time</div><div class="health-status" style="color:var(--text-secondary)" id="market-time">--:--:--</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TRADING WORKSPACE ===== -->
+      <div class="screen" id="screen-trading">
+        <div class="grid grid-4">
+          <div style="grid-column:1">
+            <div class="card" style="height:calc(100vh - 160px);overflow-y:auto">
+              <div class="card-header"><div class="card-title">Watchlist</div></div>
+              <div id="watchlist"></div>
+            </div>
+          </div>
+          <div style="grid-column:2/4">
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-header">
+                <div><div class="card-title" id="selected-symbol">AAPL</div><div class="card-subtitle"><span id="selected-price">$0.00</span> <span id="selected-change">0.00%</span></div></div>
+                <div style="display:flex;gap:8px"><button class="btn-small btn-green">BUY</button><button class="btn-small btn-red">SELL</button></div>
+              </div>
+              <div class="chart-container" style="height:320px"><div class="chart-placeholder">Interactive Chart (TradingView integration placeholder)</div></div>
+            </div>
+            <div class="card">
+              <div class="tabs"><div class="tab active" data-tab="tab-orders" data-tab-group="trading">Orders</div><div class="tab" data-tab="tab-positions" data-tab-group="trading">Positions</div><div class="tab" data-tab="tab-closed" data-tab-group="trading">Closed</div></div>
+              <div class="tab-content active" id="tab-orders" data-tab-group="trading">
+                <table class="data-table"><thead><tr><th>ID</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th><th>Time</th></tr></thead><tbody id="orders-body"><tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No orders</td></tr></tbody></table>
+              </div>
+              <div class="tab-content" id="tab-positions" data-tab-group="trading">
+                <div id="position-panel" style="max-height:200px;overflow-y:auto"></div>
+              </div>
+              <div class="tab-content" id="tab-closed" data-tab-group="trading">
+                <table class="data-table"><thead><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Date</th></tr></thead><tbody id="closed-body"><tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No closed positions</td></tr></tbody></table>
+              </div>
+            </div>
+          </div>
+          <div style="grid-column:4">
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-header"><div class="card-title">Risk Panel</div></div>
+              <div id="risk-panel"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><div class="card-title">AI Decisions</div></div>
+              <div id="decision-panel"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== AI DECISION CENTER ===== -->
+      <div class="screen" id="screen-ai-center">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Current AI Recommendation</div><div class="card-subtitle">Top confidence signal</div></div></div>
+            <div class="ai-recommendation">
+              <div class="ai-signal buy" id="ai-signal">BUY</div>
+              <div style="font-size:20px;font-weight:600" id="ai-symbol">AMD</div>
+              <div style="font-size:12px;color:var(--text-secondary)" id="ai-strategy">Momentum Alpha</div>
+              <div class="confidence-ring" id="confidence-ring"><svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" stroke="var(--border-color)" stroke-width="10" fill="none"/><circle cx="60" cy="60" r="50" stroke="var(--accent-green)" stroke-width="10" fill="none" stroke-dasharray="258 314" stroke-linecap="round" transform="rotate(-90 60 60)"/></svg><div class="confidence-text" style="color:var(--accent-green)">82%</div></div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">Confidence Score</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Analysis & Risk</div></div></div>
+            <div style="padding:12px 0">
+              <div style="font-size:13px;font-weight:600;margin-bottom:8px">Reasoning</div>
+              <p style="font-size:13px;color:var(--text-secondary);line-height:1.6" id="ai-reasoning">Loading...</p>
+            </div>
+            <div style="padding:12px 0;border-top:1px solid var(--border-color)">
+              <div style="font-size:13px;font-weight:600;margin-bottom:8px">Risk Factors</div>
+              <div id="risk-factors"></div>
+            </div>
+            <div style="display:flex;gap:16px;padding-top:12px;border-top:1px solid var(--border-color)">
+              <div style="text-align:center;flex:1"><div style="font-size:11px;color:var(--text-secondary)">Target Price</div><div style="font-size:18px;font-weight:700;color:var(--accent-green)" id="ai-target">$0.00</div></div>
+              <div style="text-align:center;flex:1"><div style="font-size:11px;color:var(--text-secondary)">Stop Loss</div><div style="font-size:18px;font-weight:700;color:var(--accent-red)" id="ai-stop">$0.00</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Decision History</div><div class="card-subtitle">All AI-generated decisions</div></div></div>
+          <table class="data-table"><thead><tr><th>ID</th><th>Symbol</th><th>Signal</th><th>Confidence</th><th>Strategy</th><th>Time</th><th>Status</th><th>Price</th></tr></thead><tbody id="decision-history"><tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No decisions</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- ===== PAPER TRADING ===== -->
+      <div class="screen" id="screen-paper-trading">
+        <div class="grid grid-4">
+          <div class="stat-card"><div class="stat-label">Session Status</div><div class="stat-value"><span class="badge badge-gray" id="paper-status">STOPPED</span></div></div>
+          <div class="stat-card"><div class="stat-label">Initial Capital</div><div class="stat-value" id="paper-capital">$100,000.00</div></div>
+          <div class="stat-card"><div class="stat-label">Current Value</div><div class="stat-value" id="paper-value">$100,000.00</div><div class="stat-change" id="paper-pnl">+$0.00</div></div>
+          <div class="stat-card"><div class="stat-label">Trades Executed</div><div class="stat-value" id="paper-trades">0</div></div>
+        </div>
+        <div class="session-controls">
+          <button class="btn-small btn-green" id="paper-start-btn">&#9654; Start Session</button>
+          <button class="btn-small btn-outline" id="paper-pause-btn">&#9612;&#9612; Pause</button>
+          <button class="btn-small btn-red" id="paper-stop-btn">&#9632; Stop Session</button>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Session Configuration</div></div></div>
+            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Symbols</span><strong>AAPL, MSFT, GOOGL</strong></div></div>
+            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Tick Interval</span><strong>1.0s</strong></div></div>
+            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Capital Allocation</span><strong>100%</strong></div></div>
+            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Simulation Mode</span><strong>Paper Broker</strong></div></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Live Activity</div></div></div>
+            <div class="activity-log" id="paper-activity"><div style="text-align:center;color:var(--text-secondary);padding:40px">No paper trading activity. Start a session to see live data.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SYSTEM HEALTH ===== -->
+      <div class="screen" id="screen-health">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Service Status</div><div class="card-subtitle">Real-time component health</div></div></div>
+            <div id="health-items"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Resource Usage</div><div class="card-subtitle">System resource monitoring</div></div></div>
+            <div style="padding:16px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Memory Usage</span><strong id="mem-usage">128 MB / 4.0 GB (3.2%)</strong></div>
+              <div class="progress-bar"><div class="progress-fill blue" id="mem-bar" style="width:3.2%"></div></div>
+            </div>
+            <div style="padding:16px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>CPU Usage</span><strong id="cpu-usage">8.5%</strong></div>
+              <div class="progress-bar"><div class="progress-fill green" id="cpu-bar" style="width:8.5%"></div></div>
+            </div>
+            <div style="padding:16px 0">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>API Latency</span><strong id="api-latency">12ms</strong></div>
+              <div class="progress-bar"><div class="progress-fill green" style="width:12%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Performance Metrics</div></div></div>
+          <div class="chart-container" id="metrics-chart"><div class="chart-placeholder">Prometheus metrics visualization</div></div>
+        </div>
+      </div>
+
+      <!-- ===== REPORTS ===== -->
+      <div class="screen" id="screen-reports">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Generated Reports</div><div class="card-subtitle">Download operational reports</div></div></div>
+          <div id="reports-list"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+// Clock update
+setInterval(()=>{ const c=document.getElementById('clock'); if(c) c.textContent=new Date().toLocaleTimeString(); }, 1000);
+</script>
+</body>
+</html>

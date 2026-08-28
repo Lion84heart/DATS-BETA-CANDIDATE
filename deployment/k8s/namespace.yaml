@@ -1,0 +1,14 @@
+---
+# DATS-BETA-CANDIDATE Kubernetes Namespace
+# Purpose: Isolates all resources for the DATS-BETA-CANDIDATE trading platform.
+# All manifests in this directory should target this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dats-beta-candidate
+  labels:
+    app.kubernetes.io/name: dats-beta-candidate
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/part-of: dats-beta-candidate
+  annotations:
+    description: "Namespace for the DATS-BETA-CANDIDATE institutional AI trading platform"

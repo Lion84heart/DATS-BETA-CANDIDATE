@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DATS Operator Interface</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b1120;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 1.25rem; color: #60a5fa; }
+        .nav-links { display: flex; gap: 1.5rem; }
+        .nav-links a { color: #94a3b8; text-decoration: none; font-size: 0.875rem; }
+        .nav-links a:hover { color: #e2e8f0; }
+        .nav-links a.active { color: #60a5fa; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 1.5rem; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+        }
+        .card h2 { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-large { font-size: 1.75rem; font-weight: 700; color: #f8fafc; }
+        .metric-positive { color: #34d399; }
+        .metric-negative { color: #f87171; }
+        .metric-neutral { color: #94a3b8; }
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-healthy { background: #34d399; }
+        .status-degraded { background: #fbbf24; }
+        .status-error { background: #f87171; }
+        .actions-bar {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+        .btn {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: #2563eb; }
+        .btn-success { background: #059669; }
+        .btn-success:hover { background: #047857; }
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #475569; }
+        .btn-secondary:hover { background: #64748b; }
+        .feed-list { max-height: 300px; overflow-y: auto; }
+        .feed-item {
+            padding: 0.625rem 0;
+            border-bottom: 1px solid #334155;
+            font-size: 0.8125rem;
+        }
+        .feed-item:last-child { border-bottom: none; }
+        .feed-time { color: #64748b; font-size: 0.75rem; }
+        .feed-badge {
+            display: inline-block;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+        .badge-info { background: #1e3a5f; color: #60a5fa; }
+        .badge-warning { background: #451a03; color: #fbbf24; }
+        .badge-error { background: #450a0a; color: #f87171; }
+        .badge-success { background: #064e3b; color: #34d399; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        th, td { padding: 0.625rem; text-align: left; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-weight: 500; }
+        .chart-placeholder {
+            height: 200px;
+            background: #0f172a;
+            border-radius: 0.375rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+        .loading { text-align: center; padding: 2rem; color: #64748b; }
+        .error { background: #450a0a; color: #f87171; padding: 0.75rem; border-radius: 0.375rem; }
+        .quick-action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+        .quick-action-btn {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            text-align: left;
+            transition: all 0.15s;
+        }
+        .quick-action-btn:hover { background: #334155; border-color: #475569; }
+        .quick-action-btn .icon { font-size: 1.25rem; margin-right: 0.5rem; }
+        .ws-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            background: #1e293b;
+        }
+        .ws-connected { color: #34d399; }
+        .ws-disconnected { color: #f87171; }
+        .panel-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 0.5rem;
+        }
+        .panel-tab {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            border-radius: 0.25rem;
+        }
+        .panel-tab:hover { color: #e2e8f0; }
+        .panel-tab.active { background: #334155; color: #e2e8f0; }
+        .panel-content { display: none; }
+        .panel-content.active { display: block; }
+        .order-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        .order-form input, .order-form select {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #e2e8f0;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.8125rem;
+        }
+        .order-form input:focus, .order-form select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .order-form label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        .config-viewer {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>DATS Operator Interface</h1>
+        <nav class="nav-links">
+            <a href="/operator" class="active">Overview</a>
+            <a href="/dashboard">Decisions</a>
+            <a href="/static/dashboard.html">Legacy Dashboard</a>
+        </nav>
+        <div class="ws-status" id="ws-status">
+            <span class="status-dot status-error" id="ws-dot"></span>
+            <span id="ws-text">WS: disconnected</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- System Overview Cards -->
+        <div class="grid-4" id="overview-cards">
+            <div class="card">
+                <h2>System Status</h2>
+                <div class="status-indicator" id="system-status">
+                    <span class="status-dot status-healthy"></span>
+                    <span>Loading...</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Portfolio Value</h2>
+                <div class="metric-large" id="portfolio-value">--</div>
+            </div>
+            <div class="card">
+                <h2>Total P&L</h2>
+                <div class="metric-large metric-neutral" id="total-pnl">--</div>
+            </div>
+            <div class="card">
+                <h2>Active Positions</h2>
+                <div class="metric-large" id="active-positions">--</div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <div class="quick-action-grid">
+                    <button class="quick-action-btn" onclick="startPaperTrading()">
+                        <span class="icon">▶</span> Start Paper Trading
+                    </button>
+                    <button class="quick-action-btn" onclick="stopPaperTrading()">
+                        <span class="icon">⏹</span> Stop Paper Trading
+                    </button>
+                    <button class="quick-action-btn" onclick="exportDecisionsCSV()">
+                        <span class="icon">📥</span> Export CSV
+                    </button>
+                    <button class="quick-action-btn" onclick="location.href='/dashboard'">
+                        <span class="icon">📊</span> Review Dashboard
+                    </button>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Paper Trading Status</h2>
+                <div id="paper-trading-status">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Management & Diagnostics -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>Order Management</h2>
+                <div class="panel-tabs">
+                    <button class="panel-tab active" onclick="switchTab('order-submit')">Submit</button>
+                    <button class="panel-tab" onclick="switchTab('order-list')">Orders</button>
+                </div>
+                <div class="panel-content active" id="order-submit">
+                    <div class="order-form">
+                        <div>
+                            <label>Symbol</label>
+                            <input type="text" id="order-symbol" placeholder="AAPL" value="AAPL">
+                        </div>
+                        <div>
+                            <label>Side</label>
+                            <select id="order-side">
+                                <option value="buy">Buy</option>
+                                <option value="sell">Sell</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Type</label>
+                            <select id="order-type">
+                                <option value="market">Market</option>
+                                <option value="limit">Limit</option>
+                                <option value="stop">Stop</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Quantity</label>
+                            <input type="number" id="order-qty" placeholder="100" value="100" min="1" step="1">
+                        </div>
+                        <div>
+                            <label>Limit Price</label>
+                            <input type="number" id="order-limit" placeholder="Optional" step="0.01">
+                        </div>
+                        <div>
+                            <label>Stop Price</label>
+                            <input type="number" id="order-stop" placeholder="Optional" step="0.01">
+                        </div>
+                    </div>
+                    <button class="btn btn-success" style="margin-top:0.75rem;width:100%" onclick="submitOrder()">Submit Order</button>
+                    <div id="order-result" style="margin-top:0.5rem;font-size:0.8125rem"></div>
+                </div>
+                <div class="panel-content" id="order-list">
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Status</th></tr>
+                        </thead>
+                        <tbody id="orders-table">
+                            <tr><td colspan="5" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Diagnostics</h2>
+                <div class="panel-tabs">
+                    <button class="panel-tab active" onclick="switchTab('diag-runtime')">Runtime</button>
+                    <button class="panel-tab" onclick="switchTab('diag-config')">Config</button>
+                    <button class="panel-tab" onclick="switchTab('diag-perf')">Performance</button>
+                </div>
+                <div class="panel-content active" id="diag-runtime">
+                    <div id="runtime-diagnostics">
+                        <div class="loading">Loading diagnostics...</div>
+                    </div>
+                </div>
+                <div class="panel-content" id="diag-config">
+                    <div class="config-viewer" id="config-viewer">Loading config...</div>
+                </div>
+                <div class="panel-content" id="diag-perf">
+                    <div id="performance-metrics">
+                        <div class="loading">Loading performance...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity & Alerts -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>Recent Decisions</h2>
+                <div class="feed-list" id="recent-decisions">
+                    <div class="loading">Loading decisions...</div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>System Alerts</h2>
+                <div class="feed-list" id="system-alerts">
+                    <div class="loading">Loading alerts...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Positions & Metrics -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>Positions</h2>
+                <table>
+                    <thead>
+                        <tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Market</th><th>P&L</th></tr>
+                    </thead>
+                    <tbody id="positions-table">
+                        <tr><td colspan="5" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h2>Key Metrics</h2>
+                <div id="key-metrics">
+                    <div class="loading">Loading metrics...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let ws = null;
+        let wsConnected = false;
+
+        async function fetchJSON(url, options) {
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        // WebSocket connection
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/system`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                wsConnected = true;
+                updateWSStatus(true);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWSMessage(data);
+                } catch (e) {
+                    console.log('WS message:', event.data);
+                }
+            };
+
+            ws.onclose = () => {
+                wsConnected = false;
+                updateWSStatus(false);
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            ws.onerror = () => {
+                wsConnected = false;
+                updateWSStatus(false);
+            };
+        }
+
+        function updateWSStatus(connected) {
+            const dot = document.getElementById('ws-dot');
+            const text = document.getElementById('ws-text');
+            if (connected) {
+                dot.className = 'status-dot status-healthy';
+                text.textContent = 'WS: connected';
+                text.className = 'ws-connected';
+            } else {
+                dot.className = 'status-dot status-error';
+                text.textContent = 'WS: disconnected';
+                text.className = 'ws-disconnected';
+            }
+        }
+
+        function handleWSMessage(data) {
+            if (data.type === 'system_update') {
+                // Refresh system status on WS update
+                loadSystemStatus();
+                loadAlerts();
+            }
+        }
+
+        async function loadSystemStatus() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/status/`);
+                const el = document.getElementById('system-status');
+                const isHealthy = data.state === 'RUNNING';
+                el.innerHTML = `
+                    <span class="status-dot ${isHealthy ? 'status-healthy' : 'status-error'}"></span>
+                    <span>${data.state} — ${data.is_running ? 'Healthy' : 'Not Running'}</span>
+                `;
+            } catch (e) {
+                document.getElementById('system-status').innerHTML = `
+                    <span class="status-dot status-error"></span>
+                    <span>Offline</span>
+                `;
+            }
+        }
+
+        async function loadPortfolio() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/portfolio/summary`);
+                document.getElementById('portfolio-value').textContent = '$' + (data.total_value || 0).toFixed(2);
+                const pnl = data.total_pnl || 0;
+                const pnlEl = document.getElementById('total-pnl');
+                pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+                pnlEl.className = 'metric-large ' + (pnl >= 0 ? 'metric-positive' : 'metric-negative');
+                document.getElementById('active-positions').textContent = data.position_count || 0;
+            } catch (e) {
+                document.getElementById('portfolio-value').textContent = 'N/A';
+            }
+        }
+
+        async function loadPaperTradingStatus() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/execution/paper/status`);
+                const el = document.getElementById('paper-trading-status');
+                if (data.running) {
+                    const acc = data.account || {};
+                    el.innerHTML = `
+                        <div class="status-indicator">
+                            <span class="status-dot status-healthy"></span>
+                            <span>Running</span>
+                        </div>
+                        <div style="margin-top:0.5rem;font-size:0.8125rem;color:#94a3b8">
+                            Cash: $${(acc.cash || 0).toFixed(2)} | Value: $${(acc.total_value || 0).toFixed(2)}
+                        </div>
+                    `;
+                } else {
+                    el.innerHTML = `
+                        <div class="status-indicator">
+                            <span class="status-dot status-error"></span>
+                            <span>Stopped</span>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                document.getElementById('paper-trading-status').innerHTML = '<div class="error">Failed to load</div>';
+            }
+        }
+
+        async function loadRecentDecisions() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/?limit=8`);
+                const el = document.getElementById('recent-decisions');
+                if (!data.records || data.records.length === 0) {
+                    el.innerHTML = '<div class="feed-item">No recent decisions</div>';
+                    return;
+                }
+                el.innerHTML = data.records.map(r => {
+                    const time = r.timestamp ? new Date(r.timestamp * 1000).toLocaleTimeString() : 'N/A';
+                    const signal = r.outcome ? 'HOLD' : (r.confidence > 0.5 ? 'BUY' : 'SELL');
+                    const badgeClass = signal === 'BUY' ? 'badge-success' : signal === 'SELL' ? 'badge-error' : 'badge-info';
+                    return `<div class="feed-item">
+                        <span class="feed-badge ${badgeClass}">${signal}</span>
+                        <strong>${r.symbol || 'N/A'}</strong> @ ${r.price || 'N/A'}
+                        <span style="color:#64748b">(${r.strategy || 'N/A'}, ${(r.confidence || 0).toFixed(2)})</span>
+                        <div class="feed-time">${time}</div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('recent-decisions').innerHTML = '<div class="error">Failed to load</div>';
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/health/`);
+                const el = document.getElementById('system-alerts');
+                const checks = data.checks || {};
+                const issues = Object.entries(checks).filter(([_, v]) => !v.healthy);
+                if (issues.length === 0) {
+                    el.innerHTML = '<div class="feed-item"><span class="feed-badge badge-success">OK</span> All systems operational</div>';
+                } else {
+                    el.innerHTML = issues.map(([name, v]) => `
+                        <div class="feed-item">
+                            <span class="feed-badge badge-error">ALERT</span>
+                            <strong>${name}</strong>: ${v.message}
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                document.getElementById('system-alerts').innerHTML = '<div class="error">Failed to load</div>';
+            }
+        }
+
+        async function loadPositions() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/positions/`);
+                const el = document.getElementById('positions-table');
+                if (!data.positions || data.positions.length === 0) {
+                    el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b">No positions</td></tr>';
+                    return;
+                }
+                el.innerHTML = data.positions.map(p => {
+                    const pnlClass = p.unrealized_pnl >= 0 ? 'metric-positive' : 'metric-negative';
+                    return `<tr>
+                        <td>${p.symbol}</td>
+                        <td>${p.quantity}</td>
+                        <td>$${p.avg_entry_price.toFixed(2)}</td>
+                        <td>$${p.market_price.toFixed(2)}</td>
+                        <td class="${pnlClass}">$${p.unrealized_pnl.toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('positions-table').innerHTML = '<tr><td colspan="5" class="error">Failed to load</td></tr>';
+            }
+        }
+
+        async function loadMetrics() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/metrics/snapshot`);
+                const el = document.getElementById('key-metrics');
+                const stats = data.histogram_stats || {};
+                const entries = Object.entries(stats).slice(0, 6);
+                if (entries.length === 0) {
+                    el.innerHTML = '<div style="color:#64748b">No metrics available</div>';
+                    return;
+                }
+                el.innerHTML = entries.map(([name, s]) => `
+                    <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155;font-size:0.8125rem">
+                        <span style="color:#94a3b8">${name}</span>
+                        <span>avg: ${(s.avg || 0).toFixed(2)} | count: ${s.count || 0}</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('key-metrics').innerHTML = '<div class="error">Failed to load</div>';
+            }
+        }
+
+        async function loadOrders() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/orders/?limit=20`);
+                const el = document.getElementById('orders-table');
+                if (!data.orders || data.orders.length === 0) {
+                    el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b">No orders</td></tr>';
+                    return;
+                }
+                el.innerHTML = data.orders.map(o => {
+                    const statusClass = o.status === 'FILLED' ? 'badge-success' : o.status === 'CANCELLED' ? 'badge-error' : 'badge-info';
+                    return `<tr>
+                        <td>${o.order_id.substring(0, 8)}...</td>
+                        <td>${o.symbol}</td>
+                        <td>${o.side}</td>
+                        <td>${o.quantity}</td>
+                        <td><span class="feed-badge ${statusClass}">${o.status}</span></td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('orders-table').innerHTML = '<tr><td colspan="5" class="error">Failed to load</td></tr>';
+            }
+        }
+
+        async function loadDiagnostics() {
+            try {
+                const token = localStorage.getItem('dats_token') || '';
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const data = await fetchJSON(`${API_BASE}/diagnostics/runtime`, { headers });
+                const el = document.getElementById('runtime-diagnostics');
+                el.innerHTML = `
+                    <div style="font-size:0.8125rem">
+                        <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155">
+                            <span style="color:#94a3b8">Python</span>
+                            <span>${data.python_version.split(' ')[0]}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155">
+                            <span style="color:#94a3b8">Platform</span>
+                            <span>${data.platform}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155">
+                            <span style="color:#94a3b8">Async Tasks</span>
+                            <span>${data.asyncio.task_count}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155">
+                            <span style="color:#94a3b8">Threads</span>
+                            <span>${data.threading.active_threads}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('runtime-diagnostics').innerHTML = '<div class="error">Auth required for diagnostics</div>';
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/config/`);
+                document.getElementById('config-viewer').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('config-viewer').textContent = 'Failed to load config';
+            }
+        }
+
+        async function loadPerformance() {
+            try {
+                const token = localStorage.getItem('dats_token') || '';
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const data = await fetchJSON(`${API_BASE}/diagnostics/performance`, { headers });
+                const el = document.getElementById('performance-metrics');
+                const perf = data.performance || {};
+                const entries = Object.entries(perf).slice(0, 6);
+                if (entries.length === 0) {
+                    el.innerHTML = '<div style="color:#64748b">No performance data</div>';
+                    return;
+                }
+                el.innerHTML = entries.map(([name, s]) => `
+                    <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #334155;font-size:0.8125rem">
+                        <span style="color:#94a3b8">${name}</span>
+                        <span>avg: ${s.avg_ms}ms | p95: ${s.p95_ms}ms</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('performance-metrics').innerHTML = '<div class="error">Auth required for performance data</div>';
+            }
+        }
+
+        async function startPaperTrading() {
+            try {
+                await fetchJSON(`${API_BASE}/execution/paper/start`, { method: 'POST' });
+                loadPaperTradingStatus();
+            } catch (e) {
+                alert('Failed to start: ' + e.message);
+            }
+        }
+
+        async function stopPaperTrading() {
+            try {
+                await fetchJSON(`${API_BASE}/execution/paper/stop`, { method: 'POST' });
+                loadPaperTradingStatus();
+            } catch (e) {
+                alert('Failed to stop: ' + e.message);
+            }
+        }
+
+        async function exportDecisionsCSV() {
+            try {
+                const data = await fetchJSON(`${API_BASE}/decisions/export/csv`);
+                const blob = new Blob([data.csv_data], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `decisions-${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Failed to export: ' + e.message);
+            }
+        }
+
+        async function submitOrder() {
+            const symbol = document.getElementById('order-symbol').value;
+            const side = document.getElementById('order-side').value;
+            const orderType = document.getElementById('order-type').value;
+            const qty = parseFloat(document.getElementById('order-qty').value);
+            const limitPrice = document.getElementById('order-limit').value;
+            const stopPrice = document.getElementById('order-stop').value;
+
+            if (!symbol || !qty || qty <= 0) {
+                document.getElementById('order-result').innerHTML = '<span style="color:#f87171">Invalid order parameters</span>';
+                return;
+            }
+
+            const payload = {
+                symbol: symbol.toUpperCase(),
+                side: side,
+                order_type: orderType,
+                quantity: qty,
+            };
+            if (limitPrice) payload.limit_price = parseFloat(limitPrice);
+            if (stopPrice) payload.stop_price = parseFloat(stopPrice);
+
+            try {
+                const result = await fetchJSON(`${API_BASE}/orders/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                document.getElementById('order-result').innerHTML = `
+                    <span style="color:#34d399">Order submitted: ${result.order_id} (${result.status})</span>
+                `;
+                loadOrders();
+            } catch (e) {
+                document.getElementById('order-result').innerHTML = `<span style="color:#f87171">Failed: ${e.message}</span>`;
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.panel-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.panel-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabId === 'order-list') loadOrders();
+            if (tabId === 'diag-runtime') loadDiagnostics();
+            if (tabId === 'diag-config') loadConfig();
+            if (tabId === 'diag-perf') loadPerformance();
+        }
+
+        function refreshAll() {
+            loadSystemStatus();
+            loadPortfolio();
+            loadPaperTradingStatus();
+            loadRecentDecisions();
+            loadAlerts();
+            loadPositions();
+            loadMetrics();
+        }
+
+        // Initialize
+        refreshAll();
+        setInterval(refreshAll, 5000);
+        connectWebSocket();
+    </script>
+</body>
+</html>
