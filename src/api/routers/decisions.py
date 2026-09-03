@@ -48,6 +48,9 @@ async def list_decisions(
                     "confidence": r.confidence_score,
                     "outcome": r.outcome_label,
                     "realized_pnl": r.realized_pnl,
+                    "reasoning_summary": r.reasoning_summary,
+                    "risk_failed_checks": r.risk_assessment.failed_checks if r.risk_assessment else [],
+                    "risk_passed_checks": r.risk_assessment.passed_checks if r.risk_assessment else [],
                 }
                 for r in records[offset:offset + limit]
             ],

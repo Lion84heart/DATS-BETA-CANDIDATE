@@ -119,30 +119,116 @@ const fmt = {
 };
 
 // ==================== DASHBOARD ====================
-function refreshDashboard(){
-  const p = demoMode ? DEMO.portfolio : {cash:0,total_value:0,day_pnl:0,total_pnl:0,buying_power:0,positions_count:0,orders_count:0};
-  const pos = demoMode ? DEMO.positions : [];
+async function refreshDashboard(){
+  let p, pos;
+  if(demoMode){
+    p = DEMO.portfolio; pos = DEMO.positions;
+  } else {
+    const r = await api('GET','/portfolio/');
+    if(r.ok){
+      p = {
+        total_value: r.data.total_value||0, day_pnl: 0, total_pnl: r.data.total_pnl||0,
+        buying_power: r.data.cash||0, positions_count: r.data.position_count||0, orders_count: 0
+      };
+      pos = (r.data.positions||[]).map(x=>({
+        symbol: x.symbol, name: '', quantity: x.quantity, avg_price: x.avg_entry_price,
+        current_price: x.market_price, mtm: x.unrealized_pnl,
+        mtm_pct: (x.avg_entry_price && x.quantity) ? (x.unrealized_pnl/(x.avg_entry_price*Math.abs(x.quantity)))*100 : 0,
+        side: x.quantity>=0?'LONG':'SHORT'
+      }));
+    } else {
+      p = {cash:0,total_value:0,day_pnl:0,total_pnl:0,buying_power:0,positions_count:0,orders_count:0};
+      pos = [];
+    }
+  }
   const strat = demoMode ? DEMO.strategies : [];
-  
+
   setText('stat-portfolio-value', fmt.money(p.total_value));
   setText('stat-day-pnl', fmt.moneySigned(p.day_pnl));
   setText('stat-total-pnl', fmt.moneySigned(p.total_pnl));
   setText('stat-buying-power', fmt.money(p.buying_power));
   setText('stat-positions-count', p.positions_count);
   setText('stat-orders-count', p.orders_count);
-  
+
   setColor('stat-day-pnl', p.day_pnl>=0?'positive':'negative');
   setColor('stat-total-pnl', p.total_pnl>=0?'positive':'negative');
-  
-  renderEquity(demoMode?DEMO.equity:[100000]);
+
+  renderEquity(demoMode?DEMO.equity:[p.total_value||0]);
   renderPositions(pos);
   renderStrategies(strat);
-  
-  setHTML('risk-status', '<span class="badge badge-green">NORMAL</span>');
-  setHTML('kill-switch', '<span class="badge badge-gray">DISARMED</span>');
-  setText('ai-status', 'ONLINE'); setText('ai-decisions', '6'); setText('ai-confidence', '82%');
-  setHTML('market-status', '<span class="badge badge-green">OPEN</span>');
+
+  if(demoMode){
+    setHTML('risk-status', '<span class="badge badge-green">NORMAL</span>');
+    setHTML('kill-switch', '<span class="badge badge-gray">DISARMED</span>');
+    setText('max-drawdown', '0.0%'); setText('daily-loss', '0.0%');
+  } else {
+    await refreshRiskStatus();
+  }
+
+  if(demoMode){
+    setText('ai-status', 'ONLINE'); setText('ai-decisions', '6'); setText('ai-confidence', '82%');
+  } else {
+    await refreshAIStatus();
+  }
+
+  const marketOpen = isMarketOpen();
+  setHTML('market-status', marketOpen
+    ? '<span class="badge badge-green">OPEN</span>'
+    : '<span class="badge badge-gray">CLOSED</span>');
   setText('market-time', fmt.time());
+}
+
+// Real kill-switch/risk state — GET /status/risk (see src/api/routers/status.py).
+async function refreshRiskStatus(){
+  const r = await api('GET','/status/risk');
+  if(!r.ok){
+    setHTML('risk-status', '<span class="badge badge-gray">UNKNOWN</span>');
+    setHTML('kill-switch', '<span class="badge badge-gray">UNKNOWN</span>');
+    setText('max-drawdown', 'N/A'); setText('daily-loss', 'N/A');
+    return;
+  }
+  const d = r.data;
+  const state = d.kill_switch_state || 'UNKNOWN';
+  const riskBadge = state==='ARMED' ? '<span class="badge badge-green">NORMAL</span>'
+    : (state==='TRIGGERED' || state==='MANUAL_HALT') ? '<span class="badge badge-red">HALTED</span>'
+    : '<span class="badge badge-gray">NOT MONITORED</span>';
+  setHTML('risk-status', riskBadge);
+  setHTML('kill-switch', `<span class="badge ${state==='ARMED'?'badge-green':(state==='TRIGGERED'||state==='MANUAL_HALT')?'badge-red':'badge-gray'}">${state}</span>`);
+  setText('max-drawdown', ((d.current_drawdown_pct||0)*100).toFixed(1)+'%');
+  setText('daily-loss', ((d.daily_loss_pct||0)*100).toFixed(1)+'%');
+}
+
+// Real AI/decision stats — GET /decisions/ (see src/api/routers/decisions.py).
+async function refreshAIStatus(){
+  const r = await api('GET','/decisions/?limit=200');
+  if(!r.ok){
+    setText('ai-status', 'OFFLINE'); setText('ai-decisions', '0'); setText('ai-confidence', '0%');
+    return;
+  }
+  const records = r.data.records || [];
+  setText('ai-status', 'ONLINE');
+  const todayStr = new Date().toDateString();
+  const today = records.filter(rec => new Date(rec.timestamp*1000).toDateString() === todayStr);
+  setText('ai-decisions', String(today.length));
+  const withConfidence = today.length ? today : records;
+  const avgConf = withConfidence.length
+    ? withConfidence.reduce((s,r)=>s+(r.confidence||0),0)/withConfidence.length
+    : 0;
+  setText('ai-confidence', (avgConf*100).toFixed(0)+'%');
+}
+
+// Honest market-hours check (NYSE regular session, DST-aware via Intl timezone
+// conversion). Does not account for market holidays — documented limitation.
+function isMarketOpen(){
+  try{
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone:'America/New_York', hour12:false, weekday:'short', hour:'2-digit', minute:'2-digit'
+    }).formatToParts(new Date());
+    const map = {}; parts.forEach(p=>map[p.type]=p.value);
+    if(['Sat','Sun'].includes(map.weekday)) return false;
+    const minutesSinceMidnight = parseInt(map.hour,10)*60 + parseInt(map.minute,10);
+    return minutesSinceMidnight >= (9*60+30) && minutesSinceMidnight < (16*60);
+  } catch(e){ return false; }
 }
 
 function setText(id,v){ const el=document.getElementById(id); if(el) el.textContent=v; }
@@ -154,7 +240,7 @@ function renderEquity(data){
   const w=svg.clientWidth||600, h=200, pad=20;
   const mn=Math.min(...data), mx=Math.max(...data), rng=mx-mn||1;
   const pts=data.map((v,i)=>{
-    const x=pad+(i/(data.length-1))*(w-pad*2);
+    const x=pad+(data.length>1?(i/(data.length-1)):0)*(w-pad*2);
     const y=h-pad-((v-mn)/rng)*(h-pad*2);
     return x+','+y;
   }).join(' ');
@@ -175,35 +261,75 @@ function renderStrategies(strategies){
 
 // ==================== TRADING WORKSPACE ====================
 let selectedSymbol='AAPL';
-function refreshTrading(){
-  const wl=demoMode?DEMO.watchlist:[];
-  const ord=demoMode?DEMO.orders:[];
-  const pos=demoMode?DEMO.positions:[];
-  
+async function refreshTrading(){
+  const wl=demoMode?DEMO.watchlist:[]; // no quotes/watchlist backend exists — honestly empty in live mode
+  let ord=[], pos=[], decisions=[];
+
+  if(demoMode){
+    ord=DEMO.orders; pos=DEMO.positions;
+  } else {
+    const [ordRes, posRes] = await Promise.all([api('GET','/orders/'), api('GET','/portfolio/')]);
+    if(ordRes.ok) ord=(ordRes.data.orders||[]).map(o=>({
+      id:o.order_id, symbol:o.symbol, side:o.side, type:o.order_type, quantity:o.quantity,
+      price:o.limit_price||o.filled_quantity&&o.avg_fill_price||0, status:o.status,
+      time:o.created_at?new Date(o.created_at).toLocaleTimeString():''
+    }));
+    if(posRes.ok) pos=(posRes.data.positions||[]).map(x=>({
+      symbol:x.symbol, quantity:x.quantity, avg_price:x.avg_entry_price, current_price:x.market_price,
+      mtm:x.unrealized_pnl
+    }));
+  }
+
   // Watchlist
   const wlEl=document.getElementById('watchlist');
-  if(wlEl) wlEl.innerHTML=wl.map(s=>`<div class="watchlist-item ${s.symbol===selectedSymbol?'selected':''}" onclick="selectSymbol('${s.symbol}',${s.price},${s.change})"><div><div class="watchlist-symbol">${s.symbol}</div><div class="watchlist-name">${s.change>=0?'&#9650;':'&#9660;'} ${Math.abs(s.change).toFixed(2)}</div></div><div><div class="watchlist-price">$${s.price.toFixed(2)}</div><div class="watchlist-change" style="color:${s.change>=0?'var(--accent-green)':'var(--accent-red)'}">${s.change>=0?'+':''}${s.change_pct.toFixed(2)}%</div></div></div>`).join('');
-  
+  if(wlEl) wlEl.innerHTML = wl.length ? wl.map(s=>`<div class="watchlist-item ${s.symbol===selectedSymbol?'selected':''}" onclick="selectSymbol('${s.symbol}',${s.price},${s.change})"><div><div class="watchlist-symbol">${s.symbol}</div><div class="watchlist-name">${s.change>=0?'&#9650;':'&#9660;'} ${Math.abs(s.change).toFixed(2)}</div></div><div><div class="watchlist-price">$${s.price.toFixed(2)}</div><div class="watchlist-change" style="color:${s.change>=0?'var(--accent-green)':'var(--accent-red)'}">${s.change>=0?'+':''}${s.change_pct.toFixed(2)}%</div></div></div>`).join('')
+    : '<div style="text-align:center;color:var(--text-secondary);padding:20px">No live quote feed configured</div>';
+
   // Orders
   const ob=document.getElementById('orders-body');
-  if(ob) ob.innerHTML=ord.map(o=>`<tr><td>${o.id}</td><td><strong>${o.symbol}</strong></td><td><span class="badge ${o.side==='BUY'?'badge-green':'badge-red'}">${o.side}</span></td><td>${o.type}</td><td>${o.quantity}</td><td>$${o.price}</td><td><span class="badge ${o.status==='FILLED'?'badge-green':o.status==='PENDING'?'badge-orange':'badge-gray'}">${o.status}</span></td><td>${o.time}</td></tr>`).join('');
-  
+  if(ob) ob.innerHTML = ord.length ? ord.map(o=>`<tr><td>${o.id}</td><td><strong>${o.symbol}</strong></td><td><span class="badge ${o.side==='BUY'?'badge-green':'badge-red'}">${o.side}</span></td><td>${o.type}</td><td>${o.quantity}</td><td>$${o.price}</td><td><span class="badge ${o.status==='FILLED'?'badge-green':o.status==='PENDING'?'badge-orange':'badge-gray'}">${o.status}</span></td><td>${o.time}</td></tr>`).join('')
+    : '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No orders</td></tr>';
+
   // Position panel
   const pp=document.getElementById('position-panel');
-  if(pp) pp.innerHTML=pos.map(p=>`<div style="padding:10px;border-bottom:1px solid var(--border-color)"><div style="display:flex;justify-content:space-between"><strong>${p.symbol}</strong><span style="color:${p.mtm>=0?'var(--accent-green)':'var(--accent-red)'}">${p.mtm>=0?'+':''}$${p.mtm.toFixed(0)}</span></div><div style="font-size:12px;color:var(--text-secondary)">${p.quantity} shares @ $${p.avg_price} &rarr; $${p.current_price}</div></div>`).join('');
-  
-  // Risk panel
-  const rp=document.getElementById('risk-panel');
-  if(rp) rp.innerHTML=`<div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Max Drawdown</span><strong>10.0%</strong></div><div class="progress-bar"><div class="progress-fill blue" style="width:24%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Daily Loss Limit</span><strong>5.0%</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:36%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Consecutive Losses</span><strong>0/5</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:0%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Margin Used</span><strong>5.0%</strong></div><div class="progress-bar"><div class="progress-fill orange" style="width:5%"></div></div></div>`;
-  
-  // Decision panel
-  const dp=document.getElementById('decision-panel');
-  if(dp) dp.innerHTML=DEMO.decisions.slice(0,4).map(d=>`<div style="padding:10px;border-bottom:1px solid var(--border-color)"><div style="display:flex;justify-content:space-between"><strong>${d.symbol}</strong><span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span></div><div style="font-size:12px;color:var(--text-secondary)">Confidence: ${(d.confidence*100).toFixed(0)}% | ${d.strategy}</div></div>`).join('');
+  if(pp) pp.innerHTML = pos.length ? pos.map(p=>`<div style="padding:10px;border-bottom:1px solid var(--border-color)"><div style="display:flex;justify-content:space-between"><strong>${p.symbol}</strong><span style="color:${p.mtm>=0?'var(--accent-green)':'var(--accent-red)'}">${p.mtm>=0?'+':''}$${p.mtm.toFixed(0)}</span></div><div style="font-size:12px;color:var(--text-secondary)">${p.quantity} shares @ $${p.avg_price} &rarr; $${p.current_price}</div></div>`).join('')
+    : '<div style="text-align:center;color:var(--text-secondary);padding:20px">No open positions</div>';
 
-  // Closed positions
+  // Risk panel — real state (demo mode keeps illustrative static values)
+  const rp=document.getElementById('risk-panel');
+  if(rp){
+    if(demoMode){
+      rp.innerHTML=`<div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Max Drawdown</span><strong>10.0%</strong></div><div class="progress-bar"><div class="progress-fill blue" style="width:24%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Daily Loss Limit</span><strong>5.0%</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:36%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Consecutive Losses</span><strong>0/5</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:0%"></div></div></div>`;
+    } else {
+      const rr = await api('GET','/status/risk');
+      if(rr.ok){
+        const d=rr.data;
+        const ddPct=(d.current_drawdown_pct||0)*100, ddLimit=(d.max_drawdown_limit_pct||0)*100;
+        const dlPct=(d.daily_loss_pct||0)*100, dlLimit=(d.daily_loss_limit_pct||0)*100;
+        rp.innerHTML=`<div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Max Drawdown</span><strong>${ddPct.toFixed(1)}% / ${ddLimit.toFixed(1)}%</strong></div><div class="progress-bar"><div class="progress-fill blue" style="width:${Math.min(100,ddLimit?ddPct/ddLimit*100:0)}%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Daily Loss Limit</span><strong>${dlPct.toFixed(1)}% / ${dlLimit.toFixed(1)}%</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:${Math.min(100,dlLimit?dlPct/dlLimit*100:0)}%"></div></div></div><div style="padding:10px 0"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span>Consecutive Losses</span><strong>${d.consecutive_losses||0}/${d.consecutive_losses_limit||0}</strong></div><div class="progress-bar"><div class="progress-fill green" style="width:${d.consecutive_losses_limit?Math.min(100,(d.consecutive_losses||0)/d.consecutive_losses_limit*100):0}%"></div></div></div>`;
+      } else {
+        rp.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:20px">Risk data unavailable</div>';
+      }
+    }
+  }
+
+  // Decision panel — real decisions (demoMode gated; previously leaked demo data always)
+  if(demoMode){
+    decisions = DEMO.decisions.slice(0,4);
+  } else {
+    const dr = await api('GET','/decisions/?limit=4');
+    if(dr.ok) decisions = (dr.data.records||[]).map(d=>({symbol:d.symbol||'-', signal:null, confidence:d.confidence||0, strategy:d.strategy||'-'}));
+  }
+  const dp=document.getElementById('decision-panel');
+  if(dp) dp.innerHTML = decisions.length ? decisions.map(d=>`<div style="padding:10px;border-bottom:1px solid var(--border-color)"><div style="display:flex;justify-content:space-between"><strong>${d.symbol}</strong>${d.signal?`<span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span>`:''}</div><div style="font-size:12px;color:var(--text-secondary)">Confidence: ${(d.confidence*100).toFixed(0)}% | ${d.strategy}</div></div>`).join('')
+    : '<div style="text-align:center;color:var(--text-secondary);padding:20px">No decisions</div>';
+
+  // Closed positions — demoMode gated; no realized-P&L history endpoint exists yet
   const cp=document.getElementById('closed-body');
-  if(cp) cp.innerHTML=DEMO.closed.map(p=>`<tr><td><strong>${p.symbol}</strong><div style="font-size:11px;color:var(--text-secondary)">${p.name}</div></td><td>${p.quantity}</td><td>$${p.entry}</td><td>$${p.exit}</td><td style="color:${p.pnl>=0?'var(--accent-green)':'var(--accent-red)'}">${p.pnl>=0?'+':''}$${p.pnl.toFixed(2)}</td><td>${p.exit_date}</td></tr>`).join('');
-  
+  if(cp) cp.innerHTML = demoMode
+    ? DEMO.closed.map(p=>`<tr><td><strong>${p.symbol}</strong><div style="font-size:11px;color:var(--text-secondary)">${p.name}</div></td><td>${p.quantity}</td><td>$${p.entry}</td><td>$${p.exit}</td><td style="color:${p.pnl>=0?'var(--accent-green)':'var(--accent-red)'}">${p.pnl>=0?'+':''}$${p.pnl.toFixed(2)}</td><td>${p.exit_date}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No closed positions</td></tr>';
+
   // Selected symbol info
   setText('selected-symbol', selectedSymbol);
   const sel=wl.find(s=>s.symbol===selectedSymbol);
@@ -219,19 +345,44 @@ function selectSymbol(sym, price, change){
 }
 
 // ==================== AI DECISION CENTER ====================
-function refreshAI(){
-  const ai=demoMode?DEMO.ai:{symbol:'-',signal:'HOLD',confidence:0,strategy:'-',reasoning:'No data',risk_factors:[],target_price:0,stop_loss:0};
-  
+async function refreshAI(){
+  let ai, historyRecords=[];
+
+  if(demoMode){
+    ai = DEMO.ai;
+    historyRecords = DEMO.decisions;
+  } else {
+    const r = await api('GET','/decisions/?limit=100');
+    const records = r.ok ? (r.data.records||[]) : [];
+    historyRecords = records; // real records, may be empty
+    const latest = records[0]; // store returns newest-first
+    // No "signal" (BUY/SELL/HOLD action), target_price, or stop_loss field exists
+    // anywhere in the decision data model — shown honestly as N/A rather than guessed.
+    ai = latest ? {
+      symbol: latest.symbol || '-', signal: null, confidence: latest.confidence||0,
+      strategy: latest.strategy || '-',
+      reasoning: latest.reasoning_summary || 'No reasoning recorded for this decision.',
+      risk_factors: latest.risk_failed_checks || [],
+      target_price: null, stop_loss: null
+    } : {
+      symbol: '-', signal: null, confidence: 0, strategy: '-',
+      reasoning: 'No decisions recorded yet.', risk_factors: [], target_price: null, stop_loss: null
+    };
+  }
+
   const sigEl=document.getElementById('ai-signal');
-  if(sigEl){ sigEl.textContent=ai.signal; sigEl.className='ai-signal '+ai.signal.toLowerCase(); }
-  
+  if(sigEl){
+    sigEl.textContent = ai.signal || 'N/A';
+    sigEl.className = 'ai-signal ' + (ai.signal ? ai.signal.toLowerCase() : '');
+  }
+
   setText('ai-symbol', ai.symbol);
   setText('ai-strategy', ai.strategy);
   setText('ai-confidence-text', (ai.confidence*100).toFixed(0)+'%');
   setText('ai-reasoning', ai.reasoning);
-  setText('ai-target', '$'+ai.target_price.toFixed(2));
-  setText('ai-stop', '$'+ai.stop_loss.toFixed(2));
-  
+  setText('ai-target', ai.target_price!=null ? '$'+ai.target_price.toFixed(2) : 'N/A');
+  setText('ai-stop', ai.stop_loss!=null ? '$'+ai.stop_loss.toFixed(2) : 'N/A');
+
   // Confidence ring
   const ring=document.getElementById('confidence-ring');
   if(ring){
@@ -239,37 +390,71 @@ function refreshAI(){
     const col=pct>=70?'var(--accent-green)':pct>=40?'var(--accent-orange)':'var(--accent-red)';
     ring.innerHTML=`<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" stroke="var(--border-color)" stroke-width="10" fill="none"/><circle cx="60" cy="60" r="50" stroke="${col}" stroke-width="10" fill="none" stroke-dasharray="${pct*3.14} 314" stroke-linecap="round" transform="rotate(-90 60 60)"/></svg><div class="confidence-text" style="color:${col}">${pct.toFixed(0)}%</div>`;
   }
-  
+
   // Risk factors
   const rf=document.getElementById('risk-factors');
-  if(rf) rf.innerHTML=ai.risk_factors.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px"><span style="color:var(--accent-red)">&#9888;</span>${f}</div>`).join('');
-  
-  // Decision history
+  if(rf) rf.innerHTML = ai.risk_factors.length
+    ? ai.risk_factors.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px"><span style="color:var(--accent-red)">&#9888;</span>${f}</div>`).join('')
+    : '<div style="font-size:13px;color:var(--text-secondary)">No risk checks failed</div>';
+
+  // Decision history — demoMode gated; previously leaked DEMO.decisions unconditionally
   const dh=document.getElementById('decision-history');
-  if(dh) dh.innerHTML=DEMO.decisions.map(d=>`<tr><td>${d.id}</td><td><strong>${d.symbol}</strong></td><td><span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span></td><td>${(d.confidence*100).toFixed(0)}%</td><td>${d.strategy}</td><td>${d.time}</td><td><span class="badge ${d.status==='EXECUTED'?'badge-green':d.status==='PENDING'?'badge-orange':'badge-red'}">${d.status}</span></td><td>$${d.price}</td></tr>`).join('');
+  if(dh) dh.innerHTML = demoMode
+    ? DEMO.decisions.map(d=>`<tr><td>${d.id}</td><td><strong>${d.symbol}</strong></td><td><span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span></td><td>${(d.confidence*100).toFixed(0)}%</td><td>${d.strategy}</td><td>${d.time}</td><td><span class="badge ${d.status==='EXECUTED'?'badge-green':d.status==='PENDING'?'badge-orange':'badge-red'}">${d.status}</span></td><td>$${d.price}</td></tr>`).join('')
+    : (historyRecords.length ? historyRecords.map(d=>`<tr><td>${d.decision_id?d.decision_id.slice(0,8):'-'}</td><td><strong>${d.symbol||'-'}</strong></td><td>-</td><td>${((d.confidence||0)*100).toFixed(0)}%</td><td>${d.strategy||'-'}</td><td>${d.timestamp?new Date(d.timestamp*1000).toLocaleTimeString():'-'}</td><td>${d.outcome?`<span class="badge badge-gray">${d.outcome}</span>`:'-'}</td><td>${d.price!=null?'$'+d.price:'-'}</td></tr>`).join('')
+      : '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No decisions</td></tr>');
 }
 
 // ==================== PAPER TRADING ====================
-function refreshPaper(){
-  const pt=demoMode?DEMO.paper:{active:false,capital:100000,cash:100000,value:100000,trades:[],ticks:0};
-  
+async function refreshPaper(){
+  let pt, config=null;
+
+  if(demoMode){
+    pt=DEMO.paper;
+  } else {
+    const r = await api('GET','/execution/paper/status');
+    if(r.ok && r.data.running){
+      const acct = r.data.account || {};
+      pt = {
+        active: true, capital: r.data.config?.initial_capital||0, cash: acct.cash||0,
+        value: acct.total_value||0, trades: [], ticks: acct.tick_count||0
+      };
+      config = r.data.config;
+    } else {
+      pt = {active:false, capital:0, cash:0, value:0, trades:[], ticks:0};
+    }
+  }
+
   setText('paper-status', pt.active?'RUNNING':'STOPPED');
   const ps=document.getElementById('paper-status');
   if(ps) ps.className='badge '+(pt.active?'badge-green':'badge-gray');
-  
+
   setText('paper-capital', fmt.money(pt.capital));
   setText('paper-cash', fmt.money(pt.cash));
   setText('paper-value', fmt.money(pt.value));
   setText('paper-pnl', fmt.moneySigned(pt.value-pt.capital));
   setText('paper-trades', pt.trades.length);
   setText('paper-ticks', pt.ticks);
-  
-  // Activity log
+
+  // Session Configuration card
+  const symbolsEl=document.getElementById('paper-config-symbols');
+  const tickEl=document.getElementById('paper-config-tick');
+  if(demoMode){
+    if(symbolsEl) symbolsEl.textContent='AAPL, MSFT, GOOGL';
+    if(tickEl) tickEl.textContent='1.0s';
+  } else if(config){
+    if(symbolsEl) symbolsEl.textContent=(config.symbols||[]).join(', ')||'-';
+    if(tickEl) tickEl.textContent=(config.tick_interval!=null?config.tick_interval:'-')+'s';
+  } else {
+    if(symbolsEl) symbolsEl.textContent='-';
+    if(tickEl) tickEl.textContent='-';
+  }
+
+  // Activity log — no trade-by-trade activity feed endpoint exists yet (see audit
+  // report, P2 item); shown honestly rather than fabricated canned entries.
   const log=document.getElementById('paper-activity');
   if(log){
-    if(!pt.active && !pt.trades.length){
-      log.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">No paper trading activity. Start a session to see live data.</div>';
-    } else {
+    if(demoMode && (pt.active || pt.trades.length)){
       const items=[
         {t:'09:30:00',icon:'&#9654;',text:'Session started with $100,000 capital'},
         {t:'09:30:15',icon:'&#128722;',text:'BUY 50 AAPL @ $182.50 (Market)'},
@@ -279,13 +464,17 @@ function refreshPaper(){
         {t:'14:30:10',icon:'&#128176;',text:'SELL 15 NVDA @ $465.00 (Limit) +$675.00'},
       ];
       log.innerHTML=items.map(i=>`<div class="activity-item"><span class="activity-time">${i.t}</span><span class="activity-icon">${i.icon}</span><span class="activity-text">${i.text}</span></div>`).join('');
+    } else if(pt.active){
+      log.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">Session running. Trade-by-trade activity feed is not yet available (tracked in the CTO audit report).</div>';
+    } else {
+      log.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">No paper trading activity. Start a session to see live data.</div>';
     }
   }
 }
 
 async function paperStart(){
   if(demoMode){ DEMO.paper.active=true; DEMO.paper.start=new Date().toISOString(); refreshPaper(); return; }
-  const r=await api('POST','/execution/paper/start',{symbols:['AAPL','MSFT','GOOGL'],capital:100000});
+  const r=await api('POST','/execution/paper/start',{symbols:['AAPL','MSFT','GOOGL'],initial_capital:100000});
   if(r.ok){ refreshPaper(); } else { alert('Failed to start: '+(r.data.detail||r.error)); }
 }
 
@@ -302,14 +491,15 @@ async function paperStop(){
 
 // ==================== SYSTEM HEALTH ====================
 async function refreshHealth(){
-  let health;
+  let health, realChecks=null;
   if(demoMode){ health=DEMO.health; }
   else {
     const r=await api('GET','/health/');
     health=r.ok?r.data:{};
+    realChecks = health.checks || null; // real shape: {checkName: {healthy, message}}
   }
-  
-  const items=[
+
+  const demoItems=[
     {name:'API Service',key:'api',icon:'&#9889;'},
     {name:'Database',key:'database',icon:'&#128451;'},
     {name:'Redis Cache',key:'redis',icon:'&#128204;'},
@@ -318,19 +508,64 @@ async function refreshHealth(){
     {name:'Memory Usage',key:'memory',icon:'&#127918;'},
     {name:'CPU Usage',key:'cpu',icon:'&#128187;'}
   ];
-  
+  // Real backend health-check names (GET /health/ → checks.*), previously
+  // mismatched against the demo-only key list above so every item always
+  // showed "UNKNOWN" regardless of actual health.
+  const realItems=[
+    {name:'Metrics Collector',key:'metrics_available',icon:'&#128202;'},
+    {name:'Alert Manager',key:'alerts_available',icon:'&#128276;'},
+    {name:'Audit Logger',key:'audit_available',icon:'&#128220;'},
+    {name:'Decision Store',key:'decisions_available',icon:'&#129504;'},
+    {name:'System Uptime',key:'system_uptime',icon:'&#9201;'}
+  ];
+
   const container=document.getElementById('health-items');
-  if(container) container.innerHTML=items.map(i=>{
-    let status, statusClass;
-    if(i.key==='memory'){ status=`${health.memory?.pct||0}%`; statusClass=health.memory?.pct>80?'critical':health.memory?.pct>50?'warning':'healthy'; }
-    else if(i.key==='cpu'){ status=`${health.cpu?.usage||0}%`; statusClass=health.cpu?.usage>80?'critical':health.cpu?.usage>50?'warning':'healthy'; }
-    else { status=(health[i.key]==='HEALTHY'?'ONLINE':health[i.key]==='NOT_CONFIGURED'?'NOT CONFIGURED':health[i.key]||'UNKNOWN'); statusClass=health[i.key]==='HEALTHY'?'healthy':health[i.key]==='NOT_CONFIGURED'?'warning':'critical'; }
-    return `<div class="health-item"><div class="health-name"><span style="margin-right:8px">${i.icon}</span>${i.name}</div><div class="health-status ${statusClass}">${status}</div></div>`;
-  }).join('');
+  if(container){
+    if(demoMode){
+      container.innerHTML=demoItems.map(i=>{
+        let status, statusClass;
+        if(i.key==='memory'){ status=`${health.memory?.pct||0}%`; statusClass=health.memory?.pct>80?'critical':health.memory?.pct>50?'warning':'healthy'; }
+        else if(i.key==='cpu'){ status=`${health.cpu?.usage||0}%`; statusClass=health.cpu?.usage>80?'critical':health.cpu?.usage>50?'warning':'healthy'; }
+        else { status=(health[i.key]==='HEALTHY'?'ONLINE':health[i.key]==='NOT_CONFIGURED'?'NOT CONFIGURED':health[i.key]||'UNKNOWN'); statusClass=health[i.key]==='HEALTHY'?'healthy':health[i.key]==='NOT_CONFIGURED'?'warning':'critical'; }
+        return `<div class="health-item"><div class="health-name"><span style="margin-right:8px">${i.icon}</span>${i.name}</div><div class="health-status ${statusClass}">${status}</div></div>`;
+      }).join('');
+    } else if(realChecks){
+      container.innerHTML=realItems.map(i=>{
+        const check=realChecks[i.key];
+        const status = check ? (check.healthy?'HEALTHY':'UNHEALTHY') : 'UNKNOWN';
+        const statusClass = check ? (check.healthy?'healthy':'critical') : 'warning';
+        return `<div class="health-item"><div class="health-name"><span style="margin-right:8px">${i.icon}</span>${i.name}</div><div class="health-status ${statusClass}">${status}</div></div>`;
+      }).join('');
+    } else {
+      container.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:20px">Health data unavailable</div>';
+    }
+  }
   
-  // Metrics chart
+  // Metrics — real snapshot from GET /metrics/snapshot (demo mode keeps the
+  // static message since there is no meaningful demo metrics dataset).
   const mc=document.getElementById('metrics-chart');
-  if(mc) mc.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">Metrics visualization requires Prometheus data</div>';
+  if(mc){
+    if(demoMode){
+      mc.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">Metrics visualization requires Prometheus data</div>';
+    } else {
+      const mr = await api('GET','/metrics/snapshot');
+      if(mr.ok){
+        const counters = mr.data.counters||{}, gauges = mr.data.gauges||{};
+        const counterKeys = Object.keys(counters), gaugeKeys = Object.keys(gauges);
+        if(!counterKeys.length && !gaugeKeys.length){
+          mc.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">No metrics recorded yet</div>';
+        } else {
+          const rows = [
+            ...counterKeys.map(k=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border-color)"><span>${k}</span><strong>${counters[k]!=null?counters[k]:'—'}</strong></div>`),
+            ...gaugeKeys.map(k=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border-color)"><span>${k}</span><strong>${gauges[k]!=null?gauges[k]:'—'}</strong></div>`)
+          ];
+          mc.innerHTML=`<div style="padding:8px 16px;max-height:260px;overflow-y:auto">${rows.join('')}</div>`;
+        }
+      } else {
+        mc.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">Metrics unavailable</div>';
+      }
+    }
+  }
 }
 
 // ==================== REPORTS ====================
