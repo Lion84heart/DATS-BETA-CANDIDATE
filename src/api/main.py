@@ -142,9 +142,27 @@ app.include_router(diagnostics.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
 
+class _RevalidateStaticFiles(StaticFiles):
+    """StaticFiles that forces revalidation on every request.
+
+    The dashboard's HTML/CSS/JS are unversioned and change between deploys.
+    Without an explicit directive, browsers apply heuristic freshness to
+    Last-Modified and can keep serving a stale ``app.js`` for a long time
+    after a new version is deployed, with no error to signal the mismatch.
+    ``no-cache`` keeps the browser cache (cheap 304s via the ETag Starlette
+    already sets) but requires a conditional GET before reuse, so a new
+    deploy is always picked up on next load.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Static files for dashboard
 try:
-    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+    app.mount("/static", _RevalidateStaticFiles(directory=_STATIC_DIR), name="static")
     logger.info("Static files mounted at /static from %s", _STATIC_DIR)
 except Exception as e:
     logger.error("Failed to mount static files from %s: %s", _STATIC_DIR, e)
