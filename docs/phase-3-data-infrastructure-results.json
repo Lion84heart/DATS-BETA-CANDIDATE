@@ -1,0 +1,325 @@
+{
+  "started_at": 1788548889.0232694,
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "ranges_utc": {
+    "1h": [
+      "2026-07-01T00:00:00+00:00",
+      "2026-08-30T00:00:00+00:00"
+    ],
+    "4h": [
+      "2026-05-01T00:00:00+00:00",
+      "2026-08-30T00:00:00+00:00"
+    ],
+    "1d": [
+      "2025-08-01T00:00:00+00:00",
+      "2026-09-01T00:00:00+00:00"
+    ]
+  },
+  "datasets": [
+    {
+      "symbol": "BTCUSDT",
+      "interval": "1h",
+      "bar_count": 1441,
+      "cache_hit": false,
+      "fetch_seconds": 2.612,
+      "integrity": {
+        "symbol": "BTCUSDT",
+        "interval": "1h",
+        "rows_in": 1441,
+        "rows_valid": 1441,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 280,
+        "is_clean": true,
+        "notes": [
+          "280 close-price outlier(s) flagged via IQR \u2014 informational only, not rejected: real markets have legitimate large moves."
+        ]
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "1h",
+        "start_time_ms": 1782864000000,
+        "end_time_ms": 1788048000000,
+        "row_count": 1441,
+        "sha256": "53d4b71eb1a33c250425eab04cd3b87ea72da0130f40d54bda5d2dd41263046d",
+        "fetched_at": 1788548891.5504296
+      }
+    },
+    {
+      "symbol": "BTCUSDT",
+      "interval": "4h",
+      "bar_count": 727,
+      "cache_hit": false,
+      "fetch_seconds": 1.126,
+      "integrity": {
+        "symbol": "BTCUSDT",
+        "interval": "4h",
+        "rows_in": 727,
+        "rows_valid": 727,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 0,
+        "is_clean": true,
+        "notes": []
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "4h",
+        "start_time_ms": 1777593600000,
+        "end_time_ms": 1788048000000,
+        "row_count": 727,
+        "sha256": "d5713d96e9a4c86b7edbe0eabfb2269cdba5af6180ff36b321e4ae24e1b9fc4d",
+        "fetched_at": 1788548892.7353528
+      }
+    },
+    {
+      "symbol": "BTCUSDT",
+      "interval": "1d",
+      "bar_count": 397,
+      "cache_hit": false,
+      "fetch_seconds": 0.953,
+      "integrity": {
+        "symbol": "BTCUSDT",
+        "interval": "1d",
+        "rows_in": 397,
+        "rows_valid": 397,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 0,
+        "is_clean": true,
+        "notes": []
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "1d",
+        "start_time_ms": 1754006400000,
+        "end_time_ms": 1788220800000,
+        "row_count": 397,
+        "sha256": "49a5c8484e346d0580d31421a631bb7b2d31a5a7704e225ee724f058bcdea8c8",
+        "fetched_at": 1788548893.703015
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "interval": "1h",
+      "bar_count": 1441,
+      "cache_hit": false,
+      "fetch_seconds": 2.073,
+      "integrity": {
+        "symbol": "ETHUSDT",
+        "interval": "1h",
+        "rows_in": 1441,
+        "rows_valid": 1441,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 311,
+        "is_clean": true,
+        "notes": [
+          "311 close-price outlier(s) flagged via IQR \u2014 informational only, not rejected: real markets have legitimate large moves."
+        ]
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "ETHUSDT",
+        "interval": "1h",
+        "start_time_ms": 1782864000000,
+        "end_time_ms": 1788048000000,
+        "row_count": 1441,
+        "sha256": "eeffdd7fa3a03b5a9abca79622c0f74ce86df8abbd3a08ce1fa7a0c65479add0",
+        "fetched_at": 1788548895.7649915
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "interval": "4h",
+      "bar_count": 727,
+      "cache_hit": false,
+      "fetch_seconds": 1.438,
+      "integrity": {
+        "symbol": "ETHUSDT",
+        "interval": "4h",
+        "rows_in": 727,
+        "rows_valid": 727,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 0,
+        "is_clean": true,
+        "notes": []
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "ETHUSDT",
+        "interval": "4h",
+        "start_time_ms": 1777593600000,
+        "end_time_ms": 1788048000000,
+        "row_count": 727,
+        "sha256": "8a7885cb221c1769248ad822991745391e97f0d73c75054ca34e8a6e4732f9bc",
+        "fetched_at": 1788548897.2139814
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "interval": "1d",
+      "bar_count": 397,
+      "cache_hit": false,
+      "fetch_seconds": 0.922,
+      "integrity": {
+        "symbol": "ETHUSDT",
+        "interval": "1d",
+        "rows_in": 397,
+        "rows_valid": 397,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 0,
+        "is_clean": true,
+        "notes": []
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "ETHUSDT",
+        "interval": "1d",
+        "start_time_ms": 1754006400000,
+        "end_time_ms": 1788220800000,
+        "row_count": 397,
+        "sha256": "2126155f0a9b787dde0f0a6075ecb403d7303e1d2055998a955af7dbd4b0f8fa",
+        "fetched_at": 1788548898.1239524
+      }
+    },
+    {
+      "symbol": "SOLUSDT",
+      "interval": "1h",
+      "bar_count": 1441,
+      "cache_hit": false,
+      "fetch_seconds": 1.851,
+      "integrity": {
+        "symbol": "SOLUSDT",
+        "interval": "1h",
+        "rows_in": 1441,
+        "rows_valid": 1441,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 213,
+        "is_clean": true,
+        "notes": [
+          "213 close-price outlier(s) flagged via IQR \u2014 informational only, not rejected: real markets have legitimate large moves."
+        ]
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "SOLUSDT",
+        "interval": "1h",
+        "start_time_ms": 1782864000000,
+        "end_time_ms": 1788048000000,
+        "row_count": 1441,
+        "sha256": "b28b2e9acbbaeab6365d1fb8b421a87053f0dbf61126a772dc205158af0bb421",
+        "fetched_at": 1788548899.9731894
+      }
+    },
+    {
+      "symbol": "SOLUSDT",
+      "interval": "4h",
+      "bar_count": 727,
+      "cache_hit": false,
+      "fetch_seconds": 0.955,
+      "integrity": {
+        "symbol": "SOLUSDT",
+        "interval": "4h",
+        "rows_in": 727,
+        "rows_valid": 727,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 21,
+        "is_clean": true,
+        "notes": [
+          "21 close-price outlier(s) flagged via IQR \u2014 informational only, not rejected: real markets have legitimate large moves."
+        ]
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "SOLUSDT",
+        "interval": "4h",
+        "start_time_ms": 1777593600000,
+        "end_time_ms": 1788048000000,
+        "row_count": 727,
+        "sha256": "8f1cf3643bbdd862c893a9151eb6f1fa896d2c4c1ed001e460816d3f9b3f09af",
+        "fetched_at": 1788548900.9237385
+      }
+    },
+    {
+      "symbol": "SOLUSDT",
+      "interval": "1d",
+      "bar_count": 397,
+      "cache_hit": false,
+      "fetch_seconds": 1.384,
+      "integrity": {
+        "symbol": "SOLUSDT",
+        "interval": "1d",
+        "rows_in": 397,
+        "rows_valid": 397,
+        "rejected_count": 0,
+        "rejected_rows_sample": [],
+        "duplicate_timestamps": 0,
+        "gap_count": 0,
+        "outlier_count": 0,
+        "is_clean": true,
+        "notes": []
+      },
+      "manifest": {
+        "source": "binance",
+        "symbol": "SOLUSDT",
+        "interval": "1d",
+        "start_time_ms": 1754006400000,
+        "end_time_ms": 1788220800000,
+        "row_count": 397,
+        "sha256": "47656bd396c1e4e2c5327b1cabafb4b14c84aad56a7b3fc9a98dbea16a49665b",
+        "fetched_at": 1788548902.324511
+      }
+    }
+  ],
+  "reproducibility_check": {
+    "symbol": "BTCUSDT",
+    "interval": "1d",
+    "first_fetch_seconds": 0.953,
+    "second_fetch_cache_hit": true,
+    "second_fetch_seconds": 0.018,
+    "checksum_match": true,
+    "first_sha256": "49a5c8484e346d0580d31421a631bb7b2d31a5a7704e225ee724f058bcdea8c8",
+    "second_sha256": "49a5c8484e346d0580d31421a631bb7b2d31a5a7704e225ee724f058bcdea8c8"
+  },
+  "backtest_proof": {
+    "symbol": "BTCUSDT",
+    "interval": "1d",
+    "num_bars": 397,
+    "total_return_pct": -16.4539,
+    "cagr_pct": -10.7842,
+    "sharpe_ratio": -0.3764,
+    "max_drawdown_pct": 29.309,
+    "profit_factor": 0.4983,
+    "win_rate_pct": 57.14,
+    "number_of_trades": 7
+  },
+  "completed_at": 1788548903.875246
+}

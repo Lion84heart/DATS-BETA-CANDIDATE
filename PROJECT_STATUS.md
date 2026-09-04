@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Phase 2 complete)
+**Last updated:** 2026-09-04 (Phase 3 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -61,6 +61,14 @@ This is a living snapshot of what actually works in the running application toda
 - Full raw results (`docs/phase-2-regime-results.json`) and the runner script (`scripts/run_regime_research.py`) are committed for reproducibility.
 - Full findings, methodology, and every table: [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md).
 
+**Historical Data Infrastructure — new as of Phase 3:**
+- Trading Engine, Strategy Engine, and Decision Fusion were frozen — no changes to `trading/strategies/*`, `trading/execution/*`, `intelligence/fusion.py`, `intelligence/engine.py`, or `backtesting/engine.py`. Verified via `git diff --name-only` scoped to every frozen path (plus the two existing modules reused, `data/quality.py` and `market/schemas.py`) immediately before commit: zero changes.
+- New `src/historical_data/` package: a real async Binance klines client (`binance_client.py`, public REST API, no key required, auto-paginating past Binance's 1,000-bar cap), integrity validation (`integrity.py`, reusing the existing `market.schemas.OHLCVBar` Pydantic validators and `data.quality.DataQualityEngine` unmodified), an on-disk checksummed cache (`cache.py`, under `data/historical_cache/` in the same persistent volume `data/decisions.db` already uses), and `HistoricalDataService` (`service.py`) tying it together into `backtesting.data.HistoricalBar` lists — the exact type the frozen `BacktestEngine` already consumes.
+- **Live-verified, not just built**: fetched 9 real datasets (BTCUSDT/ETHUSDT/SOLUSDT × 1h/4h/1d) from Binance — all integrity-clean, pagination genuinely exercised (1h fetches returned 1,441 bars, past the 1,000-per-request cap), caching proven (53x speedup on a repeat fetch), and reproducibility proven via matching SHA-256 checksums across two independent fetches (not just asserted).
+- **The frozen `BacktestEngine` ran on real market data for the first time in this project** — real BTCUSDT daily bars (2025-08-01 → 2026-09-01) through the unmodified engine and Decision Fusion: -16.45% return, Sharpe -0.376, 7 trades. Reported as computed (a loss), not cherry-picked.
+- Full raw results (`docs/phase-3-data-infrastructure-results.json`) and the runner script (`scripts/run_historical_data_infra.py`) are committed for reproducibility — fixed past UTC date ranges mean a re-run at any future date fetches the identical closed candles.
+- Full findings, architecture, and every table: [PHASE-3-DATA-INFRASTRUCTURE-REPORT.md](docs/PHASE-3-DATA-INFRASTRUCTURE-REPORT.md).
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -80,6 +88,8 @@ This is a living snapshot of what actually works in the running application toda
 - Sprint 6's recommended per-strategy fusion weights are not applied to live `DecisionFusion` — the weighted-vs-majority comparison was a near-tie (§5 of the Sprint 6 report), so this is intentionally left as a future decision pending a larger-sample follow-up, not an oversight.
 - Sprint 6's research grid uses a fixed 250-bar budget per (symbol, timeframe) run, which likely under-represents 1H performance (mature strategy warm-up needs more bars at finer timeframes) — a larger 1H-specific bar count is a natural follow-up, not yet done.
 - Phase 2's Market Regime Engine is research-only and not applied to live trading or even to the frozen `BacktestEngine` — the 48-run comparison did not show a clear improvement over the static system (see the Phase 2 section above), so no routing change is recommended for deployment at this time. A follow-up on real historical OHLCV (via the existing `parse_csv_ohlcv` path) rather than synthetic GBM data is flagged as the most promising next step, not yet done.
+- Phase 3's Historical Data Service supports Binance only as a live source — no other exchange/vendor connector exists yet. It also has no symbol/interval discovery endpoint (callers must already know a valid Binance symbol and interval string) and no API route exposing it to the UI (backend/research-facing only, by design this phase).
+- Phase 3's outlier check inherits `DataQualityEngine`'s static-window IQR test on price *levels* (not returns), which over-flags on trending series (see the Phase 3 report §4) — informational only, not acted on, but a rolling/return-based version would be more precise. Not built this phase.
 
 ## Sprint history
 
@@ -93,3 +103,4 @@ This is a living snapshot of what actually works in the running application toda
 | 5 | Backtesting & Evaluation Framework — replays historical OHLCV through the exact live Strategy Engine/Fusion/PaperBroker, 11 metrics, per-strategy stats, confusion matrix, CSV/JSON export, new UI page | [SPRINT-5-COMPLETION-REPORT.md](docs/SPRINT-5-COMPLETION-REPORT.md) |
 | 6 | Quantitative Research & Strategy Optimization — 243-run study over the frozen Strategy Engine/Fusion via the existing BacktestEngine: per-strategy comparison, fusion-vs-solo, weighted-vs-majority voting, symbol/timeframe breakdowns, recommended weights (research-only, not applied) | [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md) |
 | Phase 2 | Market Regime Engine — causal 5-regime detection, empirically-derived regime routing weights, 48-run regime-aware-vs-static comparison (near-tie, not deployed), verified reimplementation of the frozen BacktestEngine's semantics | [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md) |
+| Phase 3 | Historical Data Infrastructure — real Binance klines client, on-disk checksummed cache, integrity validation reusing existing OHLCVBar/DataQualityEngine, live-verified pagination/caching/reproducibility, first real-market-data backtest through the frozen BacktestEngine | [PHASE-3-DATA-INFRASTRUCTURE-REPORT.md](docs/PHASE-3-DATA-INFRASTRUCTURE-REPORT.md) |
