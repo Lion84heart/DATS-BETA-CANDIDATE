@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Phase 3 complete)
+**Last updated:** 2026-09-04 (Sprint 7 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -69,6 +69,17 @@ This is a living snapshot of what actually works in the running application toda
 - Full raw results (`docs/phase-3-data-infrastructure-results.json`) and the runner script (`scripts/run_historical_data_infra.py`) are committed for reproducibility — fixed past UTC date ranges mean a re-run at any future date fetches the identical closed candles.
 - Full findings, architecture, and every table: [PHASE-3-DATA-INFRASTRUCTURE-REPORT.md](docs/PHASE-3-DATA-INFRASTRUCTURE-REPORT.md).
 
+**Loss Attribution & Edge Analysis — new as of Sprint 7:**
+- Trading Engine, Strategy Engine, and Decision Fusion were frozen — no changes anywhere in the trading path, and no fixes were implemented this sprint (analysis only). Verified via `git diff --name-only` scoped to every frozen path immediately before commit: zero changes.
+- New `src/research/trade_forensics.py`: an instrumented backtest loop using the **real, unmodified `DecisionFusion`** (not a substitute) — verified via an automated sanity check to produce trade-for-trade identical output to the frozen `BacktestEngine` before the study ran.
+- New `src/research/loss_classification.py`: per-trade forensics (MAE/MFE, entry/exit timing quality, regime tags) computed as pure post-hoc arithmetic over existing OHLCV — no new indicator or strategy.
+- Analyzed **927 trades (314 losers)** across real Binance data (Phase 3's cached BTCUSDT/ETHUSDT/SOLUSDT datasets) plus a supplementary synthetic grid.
+- **Headline finding**: losses are overwhelmingly a **timing problem**, not overtrading or trend reversal. 80.57% of losing trades show a delayed entry, 70.70% a delayed exit; losers are held ~2.8x longer than winners (28.08 vs. 10.14 bars) with 3.5x the adverse excursion (12.77% vs. 3.68% MAE) but *less* favorable excursion than winners — losing trades mostly go wrong early and stay wrong. Overtrading (5.10%) and trend reversal (4.78%) are minor factors.
+- Decision Fusion's entry consensus is not meaningfully weaker on losing trades, but its **exit consensus is measurably lower** on losers (0.315 vs. 0.386 on real data) — implicating the underlying strategies' exit-side behavior more than Fusion's blending logic itself.
+- Volume Profile and Bollinger Bands are the two strategies most associated with losing entries; ATR and Trend Detection show the opposite pattern — directionally consistent with Phase 2's independently-derived regime-routing research.
+- Full raw results (`docs/sprint-7-loss-attribution-results.json`) and the runner script (`scripts/run_loss_attribution.py`) are committed for reproducibility.
+- Full findings, methodology, and every table (plus analysis-only recommendations for a future sprint — nothing implemented): [LOSS_ATTRIBUTION_REPORT.md](docs/LOSS_ATTRIBUTION_REPORT.md).
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -90,6 +101,7 @@ This is a living snapshot of what actually works in the running application toda
 - Phase 2's Market Regime Engine is research-only and not applied to live trading or even to the frozen `BacktestEngine` — the 48-run comparison did not show a clear improvement over the static system (see the Phase 2 section above), so no routing change is recommended for deployment at this time. A follow-up on real historical OHLCV (via the existing `parse_csv_ohlcv` path) rather than synthetic GBM data is flagged as the most promising next step, not yet done.
 - Phase 3's Historical Data Service supports Binance only as a live source — no other exchange/vendor connector exists yet. It also has no symbol/interval discovery endpoint (callers must already know a valid Binance symbol and interval string) and no API route exposing it to the UI (backend/research-facing only, by design this phase).
 - Phase 3's outlier check inherits `DataQualityEngine`'s static-window IQR test on price *levels* (not returns), which over-flags on trending series (see the Phase 3 report §4) — informational only, not acted on, but a rolling/return-based version would be more precise. Not built this phase.
+- Sprint 7 identified exit-signal responsiveness and entry timing as the highest-leverage places to investigate next (see `LOSS_ATTRIBUTION_REPORT.md` §7 recommendations), and flagged a maximum-adverse-excursion-based stop as a research candidate — none of this is implemented; there is still no risk-based exit anywhere in the trading path, only fused-signal-driven exits.
 
 ## Sprint history
 
@@ -104,3 +116,4 @@ This is a living snapshot of what actually works in the running application toda
 | 6 | Quantitative Research & Strategy Optimization — 243-run study over the frozen Strategy Engine/Fusion via the existing BacktestEngine: per-strategy comparison, fusion-vs-solo, weighted-vs-majority voting, symbol/timeframe breakdowns, recommended weights (research-only, not applied) | [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md) |
 | Phase 2 | Market Regime Engine — causal 5-regime detection, empirically-derived regime routing weights, 48-run regime-aware-vs-static comparison (near-tie, not deployed), verified reimplementation of the frozen BacktestEngine's semantics | [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md) |
 | Phase 3 | Historical Data Infrastructure — real Binance klines client, on-disk checksummed cache, integrity validation reusing existing OHLCVBar/DataQualityEngine, live-verified pagination/caching/reproducibility, first real-market-data backtest through the frozen BacktestEngine | [PHASE-3-DATA-INFRASTRUCTURE-REPORT.md](docs/PHASE-3-DATA-INFRASTRUCTURE-REPORT.md) |
+| 7 | Loss Attribution & Edge Analysis — forensic analysis of 927 trades (314 losers) across real + synthetic data using the real unmodified DecisionFusion; found losses are dominated by delayed entries/exits (80.6%/70.7% of losers), not overtrading or trend reversal; per-strategy and Fusion contribution measured; analysis-only, no fixes implemented | [LOSS_ATTRIBUTION_REPORT.md](docs/LOSS_ATTRIBUTION_REPORT.md) |
