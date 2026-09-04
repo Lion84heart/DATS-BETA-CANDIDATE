@@ -25,6 +25,7 @@ class ReviewRequest(BaseModel):
 async def list_decisions(
     request: Request,
     symbol: str | None = None,
+    signal: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -32,7 +33,7 @@ async def list_decisions(
     get_current_user(request)  # Any authenticated user
     try:
         store: DecisionStore = get_component(request, "decision_store")
-        records = store.query(symbol=symbol, limit=limit)
+        records = store.query(symbol=symbol, signal=signal, limit=limit)
         return {
             "count": len(records),
             "offset": offset,
@@ -46,6 +47,8 @@ async def list_decisions(
                     "price": r.market_snapshot.price if r.market_snapshot else None,
                     "strategy": r.selected_strategy,
                     "confidence": r.confidence_score,
+                    "signal": r.signal,
+                    "risk_level": r.risk_level,
                     "outcome": r.outcome_label,
                     "realized_pnl": r.realized_pnl,
                     "reasoning_summary": r.reasoning_summary,

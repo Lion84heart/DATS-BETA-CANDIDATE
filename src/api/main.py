@@ -47,6 +47,7 @@ from api.routers import (
     system,
     websocket,
 )
+from intelligence.engine import AIDecisionEngine
 from system.bootstrap import SystemBootstrap
 from system.config_loader import ConfigLoader
 from system.decision_pipeline import DecisionPipeline
@@ -79,13 +80,15 @@ async def lifespan(app: FastAPI):
     app.state.config = config_loader
     app.state.paper_mode = None
 
-    # Initialize decision pipeline
+    # Initialize decision pipeline and the AI decision engine that feeds it
     try:
         store = result.registry.get("decision_store")
         pipeline = DecisionPipeline(store=store)
         app.state.pipeline = pipeline
+        app.state.ai_engine = AIDecisionEngine(pipeline=pipeline)
     except Exception:
         app.state.pipeline = None
+        app.state.ai_engine = None
 
     # Start lifecycle
     startup_ok = await result.lifecycle.start()

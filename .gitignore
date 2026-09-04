@@ -61,6 +61,11 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Runtime data volume (decisions.db and any other persisted app state —
+# mirrors the ./data:/app/data docker-compose mount, must never be committed)
+/data/
+*.db
+
 # Flask stuff:
 instance/
 .webassets-cache

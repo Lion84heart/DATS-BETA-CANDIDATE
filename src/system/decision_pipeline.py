@@ -7,6 +7,7 @@ and outcomes for external AI review.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -68,6 +69,8 @@ class DecisionPipeline:
         context: PipelineContext,
         reasoning: str = "",
         confidence: float = 0.0,
+        signal: str | None = None,
+        risk_level: str | None = None,
     ) -> DecisionRecord:
         """Record a complete trading decision.
 
@@ -75,14 +78,18 @@ class DecisionPipeline:
             context: Pipeline context with all decision data.
             reasoning: Human-readable or AI-generated reasoning.
             confidence: Confidence score [0, 1].
+            signal: Recommendation — BUY, SELL, or HOLD.
+            risk_level: Categorical risk assessment — LOW, MEDIUM, or HIGH.
 
         Returns:
-            The recorded DecisionRecord.
+            The recorded DecisionRecord. Advisory only: recording a
+            decision never submits an order. Every decision starts
+            REVIEW_REQUIRED — see mark_reviewed().
         """
         self.metrics.increment("decisions.recorded", 1.0)
 
         record = DecisionRecord(
-            decision_id=f"{context.symbol}-{int(context.timestamp * 1000)}",
+            decision_id=f"{context.symbol}-{int(context.timestamp * 1000)}-{uuid.uuid4().hex[:8]}",
             timestamp=context.timestamp,
             phase=DecisionPhase.SIGNAL_GENERATED,
             market_snapshot=MarketSnapshot(
@@ -98,6 +105,8 @@ class DecisionPipeline:
             ),
             reasoning_summary=reasoning,
             confidence_score=confidence,
+            signal=signal,
+            risk_level=risk_level,
             selected_strategy=context.strategy_name,
             risk_assessment=RiskAssessment(
                 passed_checks=["pipeline_default"],

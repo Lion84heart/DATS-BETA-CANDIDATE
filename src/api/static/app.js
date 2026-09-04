@@ -45,14 +45,14 @@ const DEMO = {
     { name: 'Volatility Arb', status: 'ACTIVE', allocation: 20, today_pnl: 450.00, total_pnl: 5600.00 }
   ],
   decisions: [
-    { id: 'DEC-001', symbol: 'AAPL', signal: 'BUY', confidence: 0.87, strategy: 'Momentum Alpha', time: '09:28', status: 'EXECUTED', price: 182.50 },
-    { id: 'DEC-002', symbol: 'MSFT', signal: 'BUY', confidence: 0.72, strategy: 'Mean Reversion', time: '09:33', status: 'EXECUTED', price: 335.80 },
-    { id: 'DEC-003', symbol: 'TSLA', signal: 'BUY', confidence: 0.91, strategy: 'Momentum Alpha', time: '10:58', status: 'EXECUTED', price: 255.30 },
-    { id: 'DEC-004', symbol: 'NVDA', signal: 'SELL', confidence: 0.78, strategy: 'Trend Following', time: '14:25', status: 'EXECUTED', price: 465.00 },
-    { id: 'DEC-005', symbol: 'GOOGL', signal: 'HOLD', confidence: 0.45, strategy: 'Mean Reversion', time: '10:12', status: 'REJECTED', price: 128.40 },
-    { id: 'DEC-006', symbol: 'AMD', signal: 'BUY', confidence: 0.82, strategy: 'Momentum Alpha', time: '13:15', status: 'PENDING', price: 142.00 }
+    { id: 'DEC-001', symbol: 'AAPL', signal: 'BUY', confidence: 0.87, risk_level: 'LOW', strategy: 'Momentum Alpha', time: '09:28', status: 'EXECUTED', price: 182.50 },
+    { id: 'DEC-002', symbol: 'MSFT', signal: 'BUY', confidence: 0.72, risk_level: 'MEDIUM', strategy: 'Mean Reversion', time: '09:33', status: 'EXECUTED', price: 335.80 },
+    { id: 'DEC-003', symbol: 'TSLA', signal: 'BUY', confidence: 0.91, risk_level: 'HIGH', strategy: 'Momentum Alpha', time: '10:58', status: 'EXECUTED', price: 255.30 },
+    { id: 'DEC-004', symbol: 'NVDA', signal: 'SELL', confidence: 0.78, risk_level: 'MEDIUM', strategy: 'Trend Following', time: '14:25', status: 'EXECUTED', price: 465.00 },
+    { id: 'DEC-005', symbol: 'GOOGL', signal: 'HOLD', confidence: 0.45, risk_level: 'LOW', strategy: 'Mean Reversion', time: '10:12', status: 'REJECTED', price: 128.40 },
+    { id: 'DEC-006', symbol: 'AMD', signal: 'BUY', confidence: 0.82, risk_level: 'MEDIUM', strategy: 'Momentum Alpha', time: '13:15', status: 'PENDING', price: 142.00 }
   ],
-  ai: { symbol: 'AMD', signal: 'BUY', confidence: 0.82, strategy: 'Momentum Alpha',
+  ai: { symbol: 'AMD', signal: 'BUY', confidence: 0.82, risk_level: 'MEDIUM', strategy: 'Momentum Alpha',
     reasoning: 'Strong upward momentum. RSI at 62, MACD bullish crossover. Volume 28% above 20-day average.',
     risk_factors: ['High volatility (beta 1.8)', 'Semiconductor sector rotation risk', 'Earnings in 5 days'],
     target_price: 155.00, stop_loss: 132.00 },
@@ -318,7 +318,7 @@ async function refreshTrading(){
     decisions = DEMO.decisions.slice(0,4);
   } else {
     const dr = await api('GET','/decisions/?limit=4');
-    if(dr.ok) decisions = (dr.data.records||[]).map(d=>({symbol:d.symbol||'-', signal:null, confidence:d.confidence||0, strategy:d.strategy||'-'}));
+    if(dr.ok) decisions = (dr.data.records||[]).map(d=>({symbol:d.symbol||'-', signal:d.signal||null, confidence:d.confidence||0, strategy:d.strategy||'-'}));
   }
   const dp=document.getElementById('decision-panel');
   if(dp) dp.innerHTML = decisions.length ? decisions.map(d=>`<div style="padding:10px;border-bottom:1px solid var(--border-color)"><div style="display:flex;justify-content:space-between"><strong>${d.symbol}</strong>${d.signal?`<span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span>`:''}</div><div style="font-size:12px;color:var(--text-secondary)">Confidence: ${(d.confidence*100).toFixed(0)}% | ${d.strategy}</div></div>`).join('')
@@ -356,17 +356,21 @@ async function refreshAI(){
     const records = r.ok ? (r.data.records||[]) : [];
     historyRecords = records; // real records, may be empty
     const latest = records[0]; // store returns newest-first
-    // No "signal" (BUY/SELL/HOLD action), target_price, or stop_loss field exists
-    // anywhere in the decision data model — shown honestly as N/A rather than guessed.
+    // signal (BUY/SELL/HOLD), confidence, and risk_level come from the real
+    // AI Decision Engine (see intelligence/engine.py). No target_price/
+    // stop_loss field exists anywhere in the decision data model — shown
+    // honestly as N/A rather than guessed.
     ai = latest ? {
-      symbol: latest.symbol || '-', signal: null, confidence: latest.confidence||0,
+      symbol: latest.symbol || '-', signal: latest.signal || null, confidence: latest.confidence||0,
+      risk_level: latest.risk_level || null,
       strategy: latest.strategy || '-',
       reasoning: latest.reasoning_summary || 'No reasoning recorded for this decision.',
       risk_factors: latest.risk_failed_checks || [],
       target_price: null, stop_loss: null
     } : {
-      symbol: '-', signal: null, confidence: 0, strategy: '-',
-      reasoning: 'No decisions recorded yet.', risk_factors: [], target_price: null, stop_loss: null
+      symbol: '-', signal: null, confidence: 0, risk_level: null, strategy: '-',
+      reasoning: 'No decisions recorded yet. Start a Paper Trading session to let the AI Decision Engine begin analyzing live prices.',
+      risk_factors: [], target_price: null, stop_loss: null
     };
   }
 
@@ -382,6 +386,9 @@ async function refreshAI(){
   setText('ai-reasoning', ai.reasoning);
   setText('ai-target', ai.target_price!=null ? '$'+ai.target_price.toFixed(2) : 'N/A');
   setText('ai-stop', ai.stop_loss!=null ? '$'+ai.stop_loss.toFixed(2) : 'N/A');
+  setHTML('ai-risk-level', ai.risk_level
+    ? `<span style="font-size:11px;color:var(--text-secondary)">Risk Level&nbsp;</span>${riskBadge(ai.risk_level)}`
+    : '');
 
   // Confidence ring
   const ring=document.getElementById('confidence-ring');
@@ -400,9 +407,21 @@ async function refreshAI(){
   // Decision history — demoMode gated; previously leaked DEMO.decisions unconditionally
   const dh=document.getElementById('decision-history');
   if(dh) dh.innerHTML = demoMode
-    ? DEMO.decisions.map(d=>`<tr><td>${d.id}</td><td><strong>${d.symbol}</strong></td><td><span class="badge ${d.signal==='BUY'?'badge-green':d.signal==='SELL'?'badge-red':'badge-orange'}">${d.signal}</span></td><td>${(d.confidence*100).toFixed(0)}%</td><td>${d.strategy}</td><td>${d.time}</td><td><span class="badge ${d.status==='EXECUTED'?'badge-green':d.status==='PENDING'?'badge-orange':'badge-red'}">${d.status}</span></td><td>$${d.price}</td></tr>`).join('')
-    : (historyRecords.length ? historyRecords.map(d=>`<tr><td>${d.decision_id?d.decision_id.slice(0,8):'-'}</td><td><strong>${d.symbol||'-'}</strong></td><td>-</td><td>${((d.confidence||0)*100).toFixed(0)}%</td><td>${d.strategy||'-'}</td><td>${d.timestamp?new Date(d.timestamp*1000).toLocaleTimeString():'-'}</td><td>${d.outcome?`<span class="badge badge-gray">${d.outcome}</span>`:'-'}</td><td>${d.price!=null?'$'+d.price:'-'}</td></tr>`).join('')
-      : '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No decisions</td></tr>');
+    ? DEMO.decisions.map(d=>`<tr><td>${d.id}</td><td><strong>${d.symbol}</strong></td><td>${signalBadge(d.signal)}</td><td>${(d.confidence*100).toFixed(0)}%</td><td>${riskBadge(d.risk_level)}</td><td>${d.strategy}</td><td>${d.time}</td><td><span class="badge ${d.status==='EXECUTED'?'badge-green':d.status==='PENDING'?'badge-orange':'badge-red'}">${d.status}</span></td><td>$${d.price}</td></tr>`).join('')
+    : (historyRecords.length ? historyRecords.map(d=>`<tr><td>${d.decision_id?d.decision_id.slice(0,8):'-'}</td><td><strong>${d.symbol||'-'}</strong></td><td>${signalBadge(d.signal)}</td><td>${((d.confidence||0)*100).toFixed(0)}%</td><td>${riskBadge(d.risk_level)}</td><td>${d.strategy||'-'}</td><td>${d.timestamp?new Date(d.timestamp*1000).toLocaleTimeString():'-'}</td><td>${d.outcome?`<span class="badge badge-gray">${d.outcome}</span>`:'Pending review'}</td><td>${d.price!=null?'$'+d.price:'-'}</td></tr>`).join('')
+      : '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary);padding:20px">No decisions</td></tr>');
+}
+
+// Shared badge renderers for AI signal (BUY/SELL/HOLD) and risk level (LOW/MEDIUM/HIGH)
+function signalBadge(signal){
+  if(!signal) return '-';
+  const cls = signal==='BUY' ? 'badge-green' : signal==='SELL' ? 'badge-red' : 'badge-gray';
+  return `<span class="badge ${cls}">${signal}</span>`;
+}
+function riskBadge(level){
+  if(!level) return '-';
+  const cls = level==='LOW' ? 'badge-green' : level==='HIGH' ? 'badge-red' : 'badge-orange';
+  return `<span class="badge ${cls}">${level}</span>`;
 }
 
 // ==================== PAPER TRADING ====================
@@ -658,7 +677,7 @@ function downloadReport(type){
 }
 
 // ==================== AUTO REFRESH ====================
-function startRefresh(){ if(refreshInterval) clearInterval(refreshInterval); refreshInterval=setInterval(()=>{ if(currentScreen==='dashboard') refreshDashboard(); if(currentScreen==='trading') refreshTrading(); if(currentScreen==='paper-trading') refreshPaper(); if(currentScreen==='health') refreshHealth(); }, 5000); }
+function startRefresh(){ if(refreshInterval) clearInterval(refreshInterval); refreshInterval=setInterval(()=>{ if(currentScreen==='dashboard') refreshDashboard(); if(currentScreen==='trading') refreshTrading(); if(currentScreen==='paper-trading') refreshPaper(); if(currentScreen==='health') refreshHealth(); if(currentScreen==='ai-center') refreshAI(); }, 5000); }
 function stopRefresh(){ if(refreshInterval){ clearInterval(refreshInterval); refreshInterval=null; } }
 
 // ==================== INITIALIZATION ====================

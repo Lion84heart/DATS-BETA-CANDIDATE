@@ -7,6 +7,7 @@ continuous improvement, and external AI review.
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -113,6 +114,12 @@ class DecisionRecord:
     feature_vector: FeatureVector | None = None
     reasoning_summary: str = ""
     confidence_score: float = 0.0  # 0.0 to 1.0
+
+    # Recommendation — BUY, SELL, or HOLD. Advisory only: nothing in this
+    # module ever submits an order. A human must act through the separate,
+    # existing manual order-entry flow to execute anything.
+    signal: str | None = None
+    risk_level: str | None = None  # LOW, MEDIUM, HIGH
 
     # Strategy
     selected_strategy: str = ""
@@ -235,38 +242,70 @@ class DecisionPackage:
 
 
 class DecisionStore:
-    """Persistent store for decision records.
+    """Persistent store for decision records — backed by SQLite.
 
-    Simple file-based storage with in-memory indexing.
-    Production would use a time-series database.
+    A single-file relational database (Python's stdlib ``sqlite3``, no new
+    dependency or service to run) rather than one JSON file per decision.
+    The database file lives under ``data_dir`` (default ``./data``, which
+    resolves to the ``./data:/app/data`` volume already mounted in
+    docker-compose), so decisions genuinely persist across container
+    restarts instead of being lost.
     """
 
-    def __init__(self, data_dir: str | Path = "./decisions"):
+    def __init__(self, data_dir: str | Path = "./data"):
         """Initialize decision store.
 
         Args:
-            data_dir: Directory for decision storage.
+            data_dir: Directory holding the ``decisions.db`` SQLite file.
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self._index: dict[str, Path] = {}
-        self._load_index()
+        self.db_path = self.data_dir / "decisions.db"
+        # check_same_thread=False: a single shared connection is accessed
+        # from request handlers and feed-tick callbacks, all on the same
+        # asyncio event loop thread, but not necessarily the same asyncio
+        # Task — sqlite3 only cares about OS thread identity here.
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS decisions (
+                decision_id TEXT PRIMARY KEY,
+                timestamp REAL NOT NULL,
+                symbol TEXT,
+                strategy TEXT,
+                signal TEXT,
+                outcome TEXT,
+                data TEXT NOT NULL
+            )
+            """
+        )
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON decisions(timestamp)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_symbol ON decisions(symbol)")
+        self._conn.commit()
 
-    def save(self, decision: DecisionRecord) -> Path:
-        """Save a decision record.
+    def save(self, decision: DecisionRecord) -> None:
+        """Save (insert or update) a decision record.
 
         Args:
             decision: Decision to save.
-
-        Returns:
-            Path to saved file.
         """
-        date_prefix = datetime.fromtimestamp(decision.timestamp, tz=timezone.utc).strftime("%Y%m%d")
-        filename = f"{date_prefix}_{decision.decision_id}.json"
-        path = self.data_dir / filename
-        path.write_text(decision.to_json(indent=2), encoding="utf-8")
-        self._index[decision.decision_id] = path
-        return path
+        symbol = decision.market_snapshot.symbol if decision.market_snapshot else None
+        self._conn.execute(
+            """
+            INSERT INTO decisions (decision_id, timestamp, symbol, strategy, signal, outcome, data)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(decision_id) DO UPDATE SET
+                timestamp=excluded.timestamp, symbol=excluded.symbol,
+                strategy=excluded.strategy, signal=excluded.signal,
+                outcome=excluded.outcome, data=excluded.data
+            """,
+            (
+                decision.decision_id, decision.timestamp, symbol,
+                decision.selected_strategy, decision.signal, decision.outcome_label,
+                decision.to_json(),
+            ),
+        )
+        self._conn.commit()
 
     def load(self, decision_id: str) -> DecisionRecord | None:
         """Load a decision by ID.
@@ -277,11 +316,12 @@ class DecisionStore:
         Returns:
             DecisionRecord or None if not found.
         """
-        path = self._index.get(decision_id)
-        if not path or not path.exists():
+        row = self._conn.execute(
+            "SELECT data FROM decisions WHERE decision_id = ?", (decision_id,)
+        ).fetchone()
+        if row is None:
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return self._dict_to_record(data)
+        return self._dict_to_record(json.loads(row[0]))
 
     def query(
         self,
@@ -290,6 +330,7 @@ class DecisionStore:
         since: float | None = None,
         until: float | None = None,
         outcome: str | None = None,
+        signal: str | None = None,
         limit: int = 100,
     ) -> list[DecisionRecord]:
         """Query decisions with filtering.
@@ -300,44 +341,42 @@ class DecisionStore:
             since: Minimum timestamp.
             until: Maximum timestamp.
             outcome: Filter by outcome label.
+            signal: Filter by recommendation (BUY/SELL/HOLD).
             limit: Maximum results.
 
         Returns:
             Matching decisions, newest first.
         """
-        results: list[DecisionRecord] = []
-        for path in sorted(self.data_dir.glob("*.json"), reverse=True):
-            if len(results) >= limit:
-                break
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if symbol and data.get("market_snapshot", {}).get("symbol") != symbol:
-                    continue
-                if strategy and data.get("selected_strategy") != strategy:
-                    continue
-                if since and data.get("timestamp", 0) < since:
-                    continue
-                if until and data.get("timestamp", float("inf")) > until:
-                    continue
-                if outcome and data.get("outcome_label") != outcome:
-                    continue
-                results.append(self._dict_to_record(data))
-            except (OSError, json.JSONDecodeError):
-                continue
-        return results
+        clauses: list[str] = []
+        params: list[Any] = []
+        if symbol:
+            clauses.append("symbol = ?")
+            params.append(symbol)
+        if strategy:
+            clauses.append("strategy = ?")
+            params.append(strategy)
+        if since is not None:
+            clauses.append("timestamp >= ?")
+            params.append(since)
+        if until is not None:
+            clauses.append("timestamp <= ?")
+            params.append(until)
+        if outcome:
+            clauses.append("outcome = ?")
+            params.append(outcome)
+        if signal:
+            clauses.append("signal = ?")
+            params.append(signal)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"SELECT data FROM decisions {where} ORDER BY timestamp DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [self._dict_to_record(json.loads(row[0])) for row in rows]
 
     def count(self) -> int:
         """Total decisions stored."""
-        return len(list(self.data_dir.glob("*.json")))
-
-    def _load_index(self) -> None:
-        """Build index of decision IDs to file paths."""
-        for path in self.data_dir.glob("*.json"):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                self._index[data["decision_id"]] = path
-            except (OSError, json.JSONDecodeError, KeyError):
-                continue
+        return self._conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
 
     @staticmethod
     def _dict_to_record(data: dict[str, Any]) -> DecisionRecord:
@@ -348,8 +387,15 @@ class DecisionStore:
             phase=DecisionPhase[data.get("phase", "SIGNAL_GENERATED")],
             reasoning_summary=data.get("reasoning_summary", ""),
             confidence_score=data.get("confidence_score", 0.0),
+            signal=data.get("signal"),
+            risk_level=data.get("risk_level"),
             selected_strategy=data.get("selected_strategy", ""),
             strategy_parameters=data.get("strategy_parameters", {}),
+            exit_price=data.get("exit_price"),
+            exit_timestamp=data.get("exit_timestamp"),
+            realized_pnl=data.get("realized_pnl"),
+            holding_period_seconds=data.get("holding_period_seconds"),
+            outcome_label=data.get("outcome_label"),
             tags=data.get("tags", {}),
             version=data.get("version", "1.0"),
         )
@@ -362,6 +408,37 @@ class DecisionStore:
                 price=ms["price"],
                 bid=ms["bid"],
                 ask=ms["ask"],
+                volume_24h=ms.get("volume_24h"),
+                volatility_annual=ms.get("volatility_annual"),
+                market_regime=ms.get("market_regime"),
+            )
+        if data.get("feature_vector"):
+            fv = data["feature_vector"]
+            record.feature_vector = FeatureVector(
+                features=fv.get("features", {}),
+                feature_names=fv.get("feature_names", []),
+                model_version=fv.get("model_version"),
+            )
+        if data.get("risk_assessment"):
+            ra = data["risk_assessment"]
+            record.risk_assessment = RiskAssessment(
+                var_95=ra.get("var_95"),
+                cvar_95=ra.get("cvar_95"),
+                max_drawdown=ra.get("max_drawdown"),
+                position_size_pct=ra.get("position_size_pct"),
+                leverage=ra.get("leverage"),
+                kill_switch_armed=ra.get("kill_switch_armed", False),
+                passed_checks=ra.get("passed_checks", []),
+                failed_checks=ra.get("failed_checks", []),
+            )
+        if data.get("portfolio_state"):
+            ps = data["portfolio_state"]
+            record.portfolio_state = PortfolioState(
+                total_value=ps.get("total_value", 0.0),
+                cash=ps.get("cash", 0.0),
+                unrealized_pnl=ps.get("unrealized_pnl", 0.0),
+                open_positions=ps.get("open_positions", {}),
+                sector_exposure=ps.get("sector_exposure", {}),
             )
         if data.get("execution_result"):
             er = data["execution_result"]

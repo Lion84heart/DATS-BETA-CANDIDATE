@@ -74,6 +74,13 @@ async def start_paper_trading(
         if hasattr(broker, "on_price_tick") and broker.on_price_tick not in feed._callbacks:
             feed.add_callback(broker.on_price_tick)
 
+        # AI Decision Engine — analyzes the same live tick stream and
+        # records a BUY/SELL/HOLD recommendation for every pass. Advisory
+        # only: it never submits an order (see intelligence/engine.py).
+        ai_engine = getattr(request.app.state, "ai_engine", None)
+        if ai_engine is not None and ai_engine.on_price_tick not in feed._callbacks:
+            feed.add_callback(ai_engine.on_price_tick)
+
         ok = await feed.connect()
         if not ok:
             raise HTTPException(status_code=500, detail="Failed to start simulated price feed")
@@ -130,11 +137,13 @@ async def get_paper_trading_status(request: Request) -> dict:
         feed: FeedManager = get_component(request, "feed")
         broker: PaperBroker = get_component(request, "broker")
         state = feed.get_state()
+        ai_engine = getattr(request.app.state, "ai_engine", None)
         return {
             "running": state.active,
             "symbols": state.symbols,
             "tick_interval": getattr(request.app.state, "paper_tick_interval", None),
             "account": broker.to_dict(),
+            "ai_engine": ai_engine.summary() if ai_engine is not None else None,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
