@@ -304,7 +304,78 @@ class DecisionStore:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_strategy_results_symbol ON strategy_results(symbol, timestamp)"
         )
+
+        # Completed backtest runs (Sprint 5) — one row per run, with the
+        # full report (metrics, confusion stats, trades, decision log)
+        # stored as JSON so it can be re-exported later without re-running.
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS backtest_runs (
+                run_id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                started_at REAL NOT NULL,
+                completed_at REAL NOT NULL,
+                num_bars INTEGER NOT NULL,
+                total_return_pct REAL,
+                sharpe_ratio REAL,
+                number_of_trades INTEGER,
+                data TEXT NOT NULL
+            )
+            """
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_backtest_runs_started ON backtest_runs(started_at)"
+        )
         self._conn.commit()
+
+    def save_backtest_run(self, report_dict: dict[str, Any]) -> None:
+        """Persist a completed backtest run (as produced by report_to_dict).
+
+        Args:
+            report_dict: The full backtest report, already JSON-shaped.
+        """
+        metrics = report_dict.get("portfolio_metrics", {})
+        self._conn.execute(
+            """
+            INSERT INTO backtest_runs
+                (run_id, symbol, started_at, completed_at, num_bars,
+                 total_return_pct, sharpe_ratio, number_of_trades, data)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET data=excluded.data
+            """,
+            (
+                report_dict["run_id"], report_dict["symbol"], report_dict["started_at"],
+                report_dict["completed_at"], report_dict["num_bars"],
+                metrics.get("total_return_pct"), metrics.get("sharpe_ratio"),
+                metrics.get("number_of_trades"), json.dumps(report_dict, default=str),
+            ),
+        )
+        self._conn.commit()
+
+    def get_backtest_run(self, run_id: str) -> dict[str, Any] | None:
+        """Load one full backtest report by run_id."""
+        row = self._conn.execute(
+            "SELECT data FROM backtest_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def list_backtest_runs(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List backtest runs newest-first, with summary columns only."""
+        rows = self._conn.execute(
+            """
+            SELECT run_id, symbol, started_at, completed_at, num_bars,
+                   total_return_pct, sharpe_ratio, number_of_trades
+            FROM backtest_runs ORDER BY started_at DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "run_id": r[0], "symbol": r[1], "started_at": r[2], "completed_at": r[3],
+                "num_bars": r[4], "total_return_pct": r[5], "sharpe_ratio": r[6], "number_of_trades": r[7],
+            }
+            for r in rows
+        ]
 
     def save_strategy_results(
         self,

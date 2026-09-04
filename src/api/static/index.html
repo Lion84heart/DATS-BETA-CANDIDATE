@@ -51,6 +51,7 @@
       <div class="nav-item" data-screen="trading"><span class="icon">&#9650;</span><span>Trading</span></div>
       <div class="nav-item" data-screen="ai-center"><span class="icon">&#9733;</span><span>AI Center</span></div>
       <div class="nav-item" data-screen="paper-trading"><span class="icon">&#9878;</span><span>Paper Trading</span></div>
+      <div class="nav-item" data-screen="backtesting"><span class="icon">&#8635;</span><span>Backtesting</span></div>
       <div class="nav-item" data-screen="health"><span class="icon">&#9881;</span><span>System Health</span></div>
       <div class="nav-item" data-screen="reports"><span class="icon">&#9636;</span><span>Reports</span></div>
     </nav>
@@ -244,6 +245,89 @@
         <div class="card">
           <div class="card-header"><div><div class="card-title">Trade History</div><div class="card-subtitle">Filled and rejected order attempts</div></div></div>
           <table class="data-table"><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Commission</th><th>Status</th></tr></thead><tbody id="paper-history-body"><tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px">No trades yet</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- ===== BACKTESTING ===== -->
+      <div class="screen" id="screen-backtesting">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Run Backtest</div><div class="card-subtitle">Replays historical OHLCV bars through the same Strategy Engine, Decision Fusion, and paper-trade fill logic used live</div></div></div>
+          <div class="grid grid-4" style="align-items:end">
+            <div class="form-group">
+              <label>Symbol</label>
+              <select id="bt-symbol" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)">
+                <option value="AAPL">AAPL</option><option value="MSFT">MSFT</option><option value="GOOGL">GOOGL</option>
+                <option value="TSLA">TSLA</option><option value="NVDA">NVDA</option><option value="AMZN">AMZN</option>
+                <option value="META">META</option><option value="AMD">AMD</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Data Source</label>
+              <select id="bt-data-source" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)">
+                <option value="synthetic">Synthetic (generated)</option>
+                <option value="csv">CSV (paste real OHLCV)</option>
+              </select>
+            </div>
+            <div class="form-group" id="bt-num-bars-group">
+              <label>Number of Bars</label>
+              <input type="number" id="bt-num-bars" min="50" max="5000" step="50" value="500" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)">
+            </div>
+            <div class="form-group">
+              <label>Initial Capital</label>
+              <input type="number" id="bt-initial-capital" min="1000" step="1000" value="100000" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)">
+            </div>
+          </div>
+          <div class="form-group" id="bt-csv-group" style="display:none">
+            <label>CSV data (header: timestamp/date,open,high,low,close,volume)</label>
+            <textarea id="bt-csv-data" rows="6" placeholder="date,open,high,low,close,volume&#10;2026-01-01,180.00,182.50,179.10,181.75,32000000" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);font-family:monospace;font-size:12px"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:12px">
+            <button class="btn-small btn-green" id="bt-run-btn" style="min-width:160px">&#9654; Run Backtest</button>
+            <div id="bt-status" style="font-size:13px;color:var(--text-secondary)"></div>
+          </div>
+        </div>
+
+        <div id="bt-results" style="display:none">
+          <div class="grid grid-4">
+            <div class="stat-card"><div class="stat-label">Total Return</div><div class="stat-value" id="bt-total-return">0.00%</div></div>
+            <div class="stat-card"><div class="stat-label">CAGR</div><div class="stat-value" id="bt-cagr">0.00%</div></div>
+            <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="bt-win-rate">0.00%</div></div>
+            <div class="stat-card"><div class="stat-label">Profit Factor</div><div class="stat-value" id="bt-profit-factor">0.00</div></div>
+          </div>
+          <div class="grid grid-4">
+            <div class="stat-card"><div class="stat-label">Sharpe Ratio</div><div class="stat-value" id="bt-sharpe">0.00</div></div>
+            <div class="stat-card"><div class="stat-label">Sortino Ratio</div><div class="stat-value" id="bt-sortino">0.00</div></div>
+            <div class="stat-card"><div class="stat-label">Max Drawdown</div><div class="stat-value" id="bt-max-dd">0.00%</div></div>
+            <div class="stat-card"><div class="stat-label">Number of Trades</div><div class="stat-value" id="bt-num-trades">0</div></div>
+          </div>
+          <div class="grid grid-3">
+            <div class="stat-card"><div class="stat-label">Average Trade</div><div class="stat-value" id="bt-avg-trade">$0.00</div></div>
+            <div class="stat-card"><div class="stat-label">Average Hold Time</div><div class="stat-value" id="bt-avg-hold">0.0 bars</div></div>
+            <div class="stat-card"><div class="stat-label">Exposure</div><div class="stat-value" id="bt-exposure">0.00%</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Fused Signal Confusion Matrix</div><div class="card-subtitle">Predicted signal vs. actual subsequent price move</div></div></div>
+            <table class="data-table"><thead><tr><th>Predicted</th><th>Actual UP</th><th>Actual DOWN</th><th>Actual FLAT</th><th>Precision</th><th>Support</th></tr></thead><tbody id="bt-confusion-body"></tbody></table>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div><div class="card-title">Per-Strategy Statistics</div><div class="card-subtitle">Signal distribution, confidence, and precision for each of the 8 strategies</div></div></div>
+            <table class="data-table"><thead><tr><th>Strategy</th><th>BUY</th><th>SELL</th><th>HOLD</th><th>Avg Confidence</th><th>Precision (BUY/SELL/HOLD)</th></tr></thead><tbody id="bt-strategy-stats-body"></tbody></table>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div><div class="card-title">Trades</div><div class="card-subtitle" id="bt-trades-subtitle">Simulated round-trip trades</div></div>
+              <div style="display:flex;gap:8px"><button class="btn-small btn-outline" id="bt-download-json">Download JSON</button><button class="btn-small btn-outline" id="bt-download-csv">Download CSV</button></div>
+            </div>
+            <table class="data-table"><thead><tr><th>Entry Bar</th><th>Exit Bar</th><th>Entry Price</th><th>Exit Price</th><th>Qty</th><th>P&amp;L</th><th>Commission</th></tr></thead><tbody id="bt-trades-body"></tbody></table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Past Runs</div><div class="card-subtitle">Every backtest run is persisted and can be reopened or re-exported</div></div></div>
+          <table class="data-table"><thead><tr><th>Run ID</th><th>Symbol</th><th>Bars</th><th>Total Return</th><th>Sharpe</th><th>Trades</th><th>When</th><th></th></tr></thead><tbody id="bt-runs-body"><tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No backtest runs yet</td></tr></tbody></table>
         </div>
       </div>
 

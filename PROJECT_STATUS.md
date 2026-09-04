@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Sprint 4 complete)
+**Last updated:** 2026-09-04 (Sprint 5 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -33,6 +33,15 @@ This is a living snapshot of what actually works in the running application toda
 - Decisions and strategy results are stored in a real SQLite database (`data/decisions.db`, `decisions` and `strategy_results` tables, inside the same mounted volume as the rest of the app's persisted state) — verified to survive a full container restart.
 - Displayed in AI Center: Current AI Recommendation (fused signal, confidence, risk level, fusion reasoning), a new **Strategy Engine Breakdown** table (every one of the 8 strategies' independent signal/confidence/reasoning behind the current recommendation, via `GET /decisions/{id}/strategies`), and Decision History (every fused decision, status shown as "Pending review" until a human reviews it).
 
+**Backtesting & Evaluation Framework — new as of Sprint 5:**
+- New **Backtesting** page: configure a symbol, a data source (synthetic-generated OHLCV or pasted real historical CSV), bar count, and initial capital, then run.
+- Replays historical OHLCV bars through the **exact same** Strategy Engine (all 8 strategies, unmodified) and **exact same** `DecisionFusion` used live, and simulates trades via the **exact same** `PaperBroker` fill/commission/slippage/no-shorting logic Paper Trading uses — via a fresh, isolated broker instance created per run, never the live registry's shared broker. Verified: after multiple backtests generating dozens of simulated trades, the live portfolio remained untouched at exactly $100,000.00 cash with zero positions.
+- Historical data: either **CSV import** of real OHLCV data (`timestamp,open,high,low,close,volume`) — literal replay of real market history — or **synthetic generation** via the existing `MarketSimulator` (the same GBM engine already driving live paper trading's price feed), sampling several intrabar sub-steps per bar to produce genuine open/high/low/close (unlike live's single-tick bars). Both paths verified working.
+- Produces all 11 required metrics (Total Return, CAGR, Win Rate, Profit Factor, Sharpe, Sortino, Max Drawdown, Average Trade, Average Hold Time, Exposure, Number of Trades) via `backtesting/metrics.py` — standard, well-known formulas, bars-per-year=252 convention documented explicitly.
+- Produces per-strategy statistics (signal distribution, average confidence, precision) and a fused-signal confusion matrix (predicted BUY/SELL/HOLD vs. actual subsequent price move, classified UP/DOWN/FLAT over a configurable forward horizon) — all hand-verified against the API's raw output for mathematical correctness.
+- Every run is persisted (`data/decisions.db`, new `backtest_runs` table) — verified to survive a full container restart — and exportable as JSON or a multi-section CSV (summary metrics, confusion matrix, per-strategy stats, trades) via `GET /backtest/runs/{id}/export.{json,csv}`.
+- Live Trading is unchanged: no live code path (execution.py, orders.py, the live broker/feed) was modified.
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -46,7 +55,9 @@ This is a living snapshot of what actually works in the running application toda
 - No UI button yet to mark a decision reviewed from AI Center — the `POST /decisions/{id}/review` endpoint exists and works, just isn't wired to a click.
 - The Strategy Engine/AI Decision Engine starts/stops with the Paper Trading session rather than having its own independent lifecycle (no other live market-data source exists to analyze).
 - Strategy Engine runs against a fixed symbol universe (inherited from Paper Trading) — no live quotes/watchlist source exists to justify a larger one.
-- Indicators that classically depend on intrabar high/low range (ATR, Support/Resistance) currently receive tick-derived bars with high=low=close (a single price tick carries no intrabar range) — the formulas are implemented against the full OHLC contract and are forward-compatible with real OHLC bars, but today they're a documented simplification, not a limitation of the math itself.
+- Indicators that classically depend on intrabar high/low range (ATR, Support/Resistance) currently receive tick-derived bars with high=low=close (a single price tick carries no intrabar range) in **live** mode — the formulas are implemented against the full OHLC contract; **backtests now exercise the real thing**, since synthetic backtest bars have genuine open/high/low/close.
+- Backtesting is single-symbol per run (no multi-asset portfolio backtest) and single-strategy-set (the fixed 8 — no UI to pick a subset or reweight the fusion).
+- No walk-forward/out-of-sample split in the new Backtesting page (the codebase's separate, pre-existing `trading/backtest.py` has `run_walk_forward()` for single-strategy walk-forward testing, untouched by this sprint).
 
 ## Sprint history
 
@@ -57,3 +68,4 @@ This is a living snapshot of what actually works in the running application toda
 | 2 | Paper Trading engine — real buy/sell, live positions, real-time P&L, closing positions, trade history | [SPRINT-2-COMPLETION-REPORT.md](docs/SPRINT-2-COMPLETION-REPORT.md) |
 | 3 | AI Decision Engine — continuous BUY/SELL/HOLD analysis with confidence/reasoning/risk level, real SQLite persistence, advisory-only (no auto-execution) | [SPRINT-3-COMPLETION-REPORT.md](docs/SPRINT-3-COMPLETION-REPORT.md) |
 | 4 | Strategy Engine — 8 independent technical-analysis strategies (RSI, EMA Cross, VWAP, ATR, Bollinger Bands, Support/Resistance, Volume Profile, Trend Detection) + Decision Fusion combining them, no LLMs/external AI | [SPRINT-4-COMPLETION-REPORT.md](docs/SPRINT-4-COMPLETION-REPORT.md) |
+| 5 | Backtesting & Evaluation Framework — replays historical OHLCV through the exact live Strategy Engine/Fusion/PaperBroker, 11 metrics, per-strategy stats, confusion matrix, CSV/JSON export, new UI page | [SPRINT-5-COMPLETION-REPORT.md](docs/SPRINT-5-COMPLETION-REPORT.md) |

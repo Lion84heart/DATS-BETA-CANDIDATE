@@ -34,6 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from api.routers import (
     audit,
     auth,
+    backtest,
     config,
     decisions,
     diagnostics,
@@ -144,6 +145,7 @@ app.include_router(audit.router)
 app.include_router(diagnostics.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
+app.include_router(backtest.router)
 
 class _RevalidateStaticFiles(StaticFiles):
     """StaticFiles that forces revalidation on every request.

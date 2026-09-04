@@ -115,6 +115,7 @@ function show(name){
   if(name==='trading') refreshTrading();
   if(name==='ai-center') refreshAI();
   if(name==='paper-trading') refreshPaper();
+  if(name==='backtesting') refreshBacktesting();
   if(name==='health') refreshHealth();
   if(name==='reports') refreshReports();
 }
@@ -601,6 +602,141 @@ async function closePosition(symbol, quantity){
   if(currentScreen==='trading') refreshTrading();
 }
 
+// ==================== BACKTESTING ====================
+let lastBacktestReport = null;
+
+async function refreshBacktesting(){
+  if(demoMode) return; // backtesting always runs for real — nothing to illustrate in Demo Mode
+  await loadBacktestRuns();
+}
+
+async function loadBacktestRuns(){
+  const body=document.getElementById('bt-runs-body');
+  if(!body) return;
+  const r = await api('GET','/backtest/runs?limit=20');
+  const runs = r.ok ? (r.data.runs||[]) : [];
+  body.innerHTML = runs.length
+    ? runs.map(run=>`<tr><td style="font-size:12px">${run.run_id}</td><td><strong>${run.symbol}</strong></td><td>${run.num_bars}</td><td style="color:${(run.total_return_pct||0)>=0?'var(--accent-green)':'var(--accent-red)'}">${(run.total_return_pct||0).toFixed(2)}%</td><td>${(run.sharpe_ratio||0).toFixed(2)}</td><td>${run.number_of_trades||0}</td><td>${new Date(run.started_at*1000).toLocaleString()}</td><td><button class="btn-small btn-outline" onclick="loadBacktestRun('${run.run_id}')">View</button></td></tr>`).join('')
+    : '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:20px">No backtest runs yet</td></tr>';
+}
+
+async function loadBacktestRun(runId){
+  const statusEl=document.getElementById('bt-status');
+  if(statusEl) statusEl.textContent='Loading run...';
+  const r = await api('GET', `/backtest/runs/${runId}`);
+  if(r.ok){ renderBacktestReport(r.data); if(statusEl) statusEl.textContent=`Loaded ${runId}`; }
+  else if(statusEl){ statusEl.textContent='Failed to load run.'; statusEl.style.color='var(--accent-red)'; }
+}
+
+function renderBacktestReport(report){
+  lastBacktestReport = report;
+  document.getElementById('bt-results').style.display='';
+
+  const m = report.portfolio_metrics || {};
+  setText('bt-total-return', (m.total_return_pct||0).toFixed(2)+'%');
+  setColor('bt-total-return', (m.total_return_pct||0)>=0?'positive':'negative');
+  setText('bt-cagr', (m.cagr_pct||0).toFixed(2)+'%');
+  setText('bt-win-rate', (m.win_rate_pct||0).toFixed(2)+'%');
+  setText('bt-profit-factor', m.profit_factor==null ? '∞' : m.profit_factor.toFixed(2));
+  setText('bt-sharpe', (m.sharpe_ratio||0).toFixed(2));
+  setText('bt-sortino', (m.sortino_ratio||0).toFixed(2));
+  setText('bt-max-dd', (m.max_drawdown_pct||0).toFixed(2)+'%');
+  setText('bt-num-trades', m.number_of_trades||0);
+  setText('bt-avg-trade', fmt.moneySigned(m.average_trade_pnl||0));
+  setText('bt-avg-hold', (m.average_hold_time_bars||0).toFixed(1)+' bars');
+  setText('bt-exposure', (m.exposure_pct||0).toFixed(2)+'%');
+
+  // Fusion confusion matrix
+  const fc = report.fusion_confusion || {};
+  const cbody = document.getElementById('bt-confusion-body');
+  if(cbody){
+    const rows = ['BUY','SELL','HOLD'].map(p=>{
+      const row=(fc.matrix||{})[p]||{UP:0,DOWN:0,FLAT:0};
+      const prec=(fc.precision_pct||{})[p]||0;
+      const support=(fc.support||{})[p]||0;
+      return `<tr><td>${signalBadge(p)}</td><td>${row.UP||0}</td><td>${row.DOWN||0}</td><td>${row.FLAT||0}</td><td>${prec.toFixed(1)}%</td><td>${support}</td></tr>`;
+    }).join('');
+    cbody.innerHTML = rows;
+  }
+
+  // Per-strategy statistics
+  const sbody = document.getElementById('bt-strategy-stats-body');
+  if(sbody){
+    const stats = report.per_strategy_stats || [];
+    sbody.innerHTML = stats.length ? stats.map(s=>{
+      const prec = (s.confusion && s.confusion.precision_pct) || {};
+      return `<tr><td><strong>${s.strategy}</strong></td><td>${s.buy_count}</td><td>${s.sell_count}</td><td>${s.hold_count}</td><td>${((s.avg_confidence||0)*100).toFixed(0)}%</td><td style="font-size:12px">${(prec.BUY||0).toFixed(0)}% / ${(prec.SELL||0).toFixed(0)}% / ${(prec.HOLD||0).toFixed(0)}%</td></tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No data</td></tr>';
+  }
+
+  // Trades
+  const tbody = document.getElementById('bt-trades-body');
+  const tsub = document.getElementById('bt-trades-subtitle');
+  if(tsub) tsub.textContent = `${(report.trades||[]).length} simulated round-trip trades`;
+  if(tbody){
+    const trades = report.trades || [];
+    tbody.innerHTML = trades.length ? trades.slice(0,200).map(t=>`<tr><td>${t.entry_bar}</td><td>${t.exit_bar}</td><td>$${t.entry_price.toFixed(2)}</td><td>$${t.exit_price.toFixed(2)}</td><td>${t.quantity}</td><td style="color:${t.pnl>=0?'var(--accent-green)':'var(--accent-red)'}">${t.pnl>=0?'+':''}$${t.pnl.toFixed(2)}</td><td>$${t.commission.toFixed(2)}</td></tr>`).join('')
+      : '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px">No trades — the fused signal never triggered a BUY</td></tr>';
+  }
+}
+
+async function runBacktest(){
+  const statusEl=document.getElementById('bt-status');
+  const runBtn=document.getElementById('bt-run-btn');
+  const symbol=document.getElementById('bt-symbol').value;
+  const dataSource=document.getElementById('bt-data-source').value;
+  const numBars=parseInt(document.getElementById('bt-num-bars').value,10)||500;
+  const initialCapital=parseFloat(document.getElementById('bt-initial-capital').value)||100000;
+  const csvData=document.getElementById('bt-csv-data').value;
+
+  if(dataSource==='csv' && !csvData.trim()){
+    if(statusEl){ statusEl.textContent='Paste CSV data first, or switch to Synthetic.'; statusEl.style.color='var(--accent-red)'; }
+    return;
+  }
+
+  if(runBtn) runBtn.disabled=true;
+  if(statusEl){ statusEl.textContent='Running backtest — replaying bars through all 8 strategies + fusion...'; statusEl.style.color='var(--text-secondary)'; }
+
+  const body = {
+    symbol, data_source: dataSource, num_bars: numBars, initial_capital: initialCapital,
+  };
+  if(dataSource==='csv') body.csv_data = csvData;
+
+  const r = await api('POST','/backtest/run', body);
+  if(runBtn) runBtn.disabled=false;
+
+  if(r.ok){
+    renderBacktestReport(r.data);
+    if(statusEl){ statusEl.textContent=`Done: ${r.data.num_bars} bars, ${(r.data.trades||[]).length} trades.`; statusEl.style.color='var(--accent-green)'; }
+    await loadBacktestRuns();
+  } else if(statusEl){
+    statusEl.textContent = r.data.detail || r.error || 'Backtest failed.';
+    statusEl.style.color='var(--accent-red)';
+  }
+}
+
+function downloadBacktestJson(){
+  if(!lastBacktestReport){ return; }
+  const blob=new Blob([JSON.stringify(lastBacktestReport,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${lastBacktestReport.run_id}.json`; a.click(); URL.revokeObjectURL(url);
+}
+
+async function downloadBacktestCsv(){
+  if(!lastBacktestReport) return;
+  // Plain-text CSV response — bypass the shared api() helper, which
+  // always parses JSON and would silently return {} for this endpoint.
+  const h = {}; if(authToken) h['Authorization']=`Bearer ${authToken}`;
+  let csvText = '';
+  try{
+    const resp = await fetch(`${API_BASE}/backtest/runs/${lastBacktestReport.run_id}/export.csv`, {headers:h});
+    csvText = await resp.text();
+  } catch(e){ csvText = ''; }
+  const blob=new Blob([csvText],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${lastBacktestReport.run_id}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
 // ==================== SYSTEM HEALTH ====================
 async function refreshHealth(){
   let health, realChecks=null;
@@ -769,6 +905,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if(obuy) obuy.addEventListener('click',()=>placeOrder('buy'));
   const osell=document.getElementById('order-sell-btn');
   if(osell) osell.addEventListener('click',()=>placeOrder('sell'));
+
+  // Backtesting
+  const btRun=document.getElementById('bt-run-btn');
+  if(btRun) btRun.addEventListener('click', runBacktest);
+  const btJson=document.getElementById('bt-download-json');
+  if(btJson) btJson.addEventListener('click', downloadBacktestJson);
+  const btCsv=document.getElementById('bt-download-csv');
+  if(btCsv) btCsv.addEventListener('click', downloadBacktestCsv);
+  const btSource=document.getElementById('bt-data-source');
+  if(btSource) btSource.addEventListener('change', (e)=>{
+    const isCsv = e.target.value==='csv';
+    document.getElementById('bt-csv-group').style.display = isCsv ? '' : 'none';
+    document.getElementById('bt-num-bars-group').style.display = isCsv ? 'none' : '';
+  });
 
   // Tabs
   document.querySelectorAll('.tab').forEach(t=>{
