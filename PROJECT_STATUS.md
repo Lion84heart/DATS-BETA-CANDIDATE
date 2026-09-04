@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Sprint 7 complete)
+**Last updated:** 2026-09-04 (Phase 4 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -80,6 +80,16 @@ This is a living snapshot of what actually works in the running application toda
 - Full raw results (`docs/sprint-7-loss-attribution-results.json`) and the runner script (`scripts/run_loss_attribution.py`) are committed for reproducibility.
 - Full findings, methodology, and every table (plus analysis-only recommendations for a future sprint — nothing implemented): [LOSS_ATTRIBUTION_REPORT.md](docs/LOSS_ATTRIBUTION_REPORT.md).
 
+**Trade Management Intelligence — new as of Phase 4 (built, backtested, NOT deployed):**
+- Strategy Engine, Decision Fusion, and all existing indicators were frozen — no changes anywhere in the trading/signal path. Verified via `git diff --name-only` scoped to every frozen path immediately before commit: zero changes.
+- New `src/execution_intelligence/` package — 8 genuinely usable (not one-off research) modules sitting between a fused BUY/SELL/HOLD decision and the broker fill: Entry Quality Filter, Dynamic Exit Engine, ATR-based Stop Loss, Trailing Stop, Break-even Protection, Position Sizing Engine, Trade Quality Score, and the combined Risk-Adjusted Execution pipeline. Uses the real, unmodified `DecisionFusion` throughout — verified via sanity check to reproduce the frozen `BacktestEngine` exactly at all-toggles-off.
+- Backtested every module independently plus fully combined, 136 backtests across real Binance data (Phase 3's cached datasets) and a synthetic grid.
+- **Honest statistical verdict, not spun**: no variant shows a statistically significant Sharpe improvement (all t-statistics far below significance at n=17). However, Position Sizing alone and the fully combined system both reduced max drawdown on **all 17 of 17 price series tested with zero exceptions** — a sign test gives p ≈ 0.0000076, a real and strong (if partial — downside risk, not proven risk-adjusted return) effect.
+- Individual exit-only modules (ATR stop, trailing stop, break-even) tested alone mostly *hurt* Sharpe and profit factor — they only help in combination with position sizing. The Entry Quality Filter's fixed threshold is miscalibrated across data sources (helps synthetic, hurts real).
+- **Per this phase's own gate ("nothing goes live unless statistically superior"), nothing is deployed.** Position Sizing alone and the full combined system are flagged as the two candidates worth a larger-sample follow-up; nothing here is imported by any live path.
+- Full raw results (`docs/phase-4-trade-management-results.json`) and the runner script (`scripts/run_phase4_trade_management.py`) are committed for reproducibility.
+- Full findings, methodology, statistical tests, and every table: [PHASE-4-TRADE-MANAGEMENT-REPORT.md](docs/PHASE-4-TRADE-MANAGEMENT-REPORT.md).
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -102,6 +112,8 @@ This is a living snapshot of what actually works in the running application toda
 - Phase 3's Historical Data Service supports Binance only as a live source — no other exchange/vendor connector exists yet. It also has no symbol/interval discovery endpoint (callers must already know a valid Binance symbol and interval string) and no API route exposing it to the UI (backend/research-facing only, by design this phase).
 - Phase 3's outlier check inherits `DataQualityEngine`'s static-window IQR test on price *levels* (not returns), which over-flags on trending series (see the Phase 3 report §4) — informational only, not acted on, but a rolling/return-based version would be more precise. Not built this phase.
 - Sprint 7 identified exit-signal responsiveness and entry timing as the highest-leverage places to investigate next (see `LOSS_ATTRIBUTION_REPORT.md` §7 recommendations), and flagged a maximum-adverse-excursion-based stop as a research candidate — none of this is implemented; there is still no risk-based exit anywhere in the trading path, only fused-signal-driven exits.
+- Phase 4's trade-management modules are built and independently backtested but not deployed — none showed statistically significant Sharpe improvement at the sample size tested (n=17). Position Sizing alone and the full combined system showed a statistically significant max-drawdown reduction (17/17 price series, sign-test p≈0.0000076) but that alone doesn't meet the "statistically superior" bar this phase set for going live. A larger-sample validation targeting Sharpe significance is the flagged next step, not yet done.
+- Phase 4's Entry Quality Filter uses one fixed quality-score threshold (55/100) across all data sources — it measurably helps synthetic data and measurably hurts real Binance data at that setting. Per-source/per-symbol calibration is a candidate follow-up, not built.
 
 ## Sprint history
 
@@ -117,3 +129,4 @@ This is a living snapshot of what actually works in the running application toda
 | Phase 2 | Market Regime Engine — causal 5-regime detection, empirically-derived regime routing weights, 48-run regime-aware-vs-static comparison (near-tie, not deployed), verified reimplementation of the frozen BacktestEngine's semantics | [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md) |
 | Phase 3 | Historical Data Infrastructure — real Binance klines client, on-disk checksummed cache, integrity validation reusing existing OHLCVBar/DataQualityEngine, live-verified pagination/caching/reproducibility, first real-market-data backtest through the frozen BacktestEngine | [PHASE-3-DATA-INFRASTRUCTURE-REPORT.md](docs/PHASE-3-DATA-INFRASTRUCTURE-REPORT.md) |
 | 7 | Loss Attribution & Edge Analysis — forensic analysis of 927 trades (314 losers) across real + synthetic data using the real unmodified DecisionFusion; found losses are dominated by delayed entries/exits (80.6%/70.7% of losers), not overtrading or trend reversal; per-strategy and Fusion contribution measured; analysis-only, no fixes implemented | [LOSS_ATTRIBUTION_REPORT.md](docs/LOSS_ATTRIBUTION_REPORT.md) |
+| Phase 4 | Trade Management Intelligence — 8 new execution-quality modules (entry filter, dynamic exit engine, ATR stop, trailing stop, break-even, position sizing, quality score, risk-adjusted execution), 136 backtests; statistically significant max-drawdown reduction (17/17, p≈0.0000076) but no significant Sharpe improvement — nothing deployed per the phase's own gate | [PHASE-4-TRADE-MANAGEMENT-REPORT.md](docs/PHASE-4-TRADE-MANAGEMENT-REPORT.md) |
