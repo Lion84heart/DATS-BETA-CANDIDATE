@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Sprint 5 complete)
+**Last updated:** 2026-09-04 (Sprint 6 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -42,6 +42,16 @@ This is a living snapshot of what actually works in the running application toda
 - Every run is persisted (`data/decisions.db`, new `backtest_runs` table) — verified to survive a full container restart — and exportable as JSON or a multi-section CSV (summary metrics, confusion matrix, per-strategy stats, trades) via `GET /backtest/runs/{id}/export.{json,csv}`.
 - Live Trading is unchanged: no live code path (execution.py, orders.py, the live broker/feed) was modified.
 
+**Quantitative Research & Strategy Optimization — new as of Sprint 6:**
+- Trading engine, Strategy Engine, and execution engine were frozen for the sprint — no new indicators, no new strategies, no changes to `intelligence/fusion.py`, `intelligence/engine.py`, `trading/strategies/*`, or any execution code. Verified via `git diff --name-only` scoped to every frozen path immediately before commit: zero changes.
+- New `src/research/` package (research-only, never imported by any live path) ran a 243-run study — 216-run solo-strategy/fusion grid (8 symbols × 3 timeframes × 9 variants), 24-run fusion-method comparison, 3 large-scale (5,000-bar) flagship runs — entirely through the existing, unmodified `backtesting.BacktestEngine` (which already supported pluggable `strategies=`/`fusion=` constructor args from Sprint 5, so no engine change was needed).
+- **Decision Fusion beats every individual strategy** on risk-adjusted return (avg Sharpe 0.568 vs. the best solo strategy, Volume Profile, at 0.527) — the clearest result of the study, confirming the ensemble's value over any single signal.
+- **Weighted vs. majority voting compared honestly, not spun**: live confidence-weighted fusion and an optimized-weight variant tied at 3/8 symbol wins each; unweighted majority voting won 2/8. Reported as a near-tie requiring a larger sample before any weight change is adopted — see full nuance in the report.
+- Produced a recommended per-strategy weight vector (data-grounded, e.g. VWAP 1.734, Volume Profile 1.595 highest; Trend Detection 0.285, EMA Cross 0.285 lowest) — **research output only, not applied to live trading**, since applying it would require editing the frozen `intelligence/fusion.py`.
+- Symbol-specific and timeframe-specific breakdowns produced for all 8 symbols and all 3 timeframes (1H/1D/1W); 1H results are close to flat, most likely a fixed-250-bar warm-up-period artifact rather than evidence intraday doesn't work — flagged as an open question for a future study.
+- Full raw results (`docs/sprint-6-research-results.json`) and the runner script (`scripts/run_quant_research.py`) are committed for reproducibility — the study is fully deterministic (fixed seed base) and can be re-run to reproduce every number in the report exactly.
+- Full findings, methodology, and every table: [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md).
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -58,6 +68,8 @@ This is a living snapshot of what actually works in the running application toda
 - Indicators that classically depend on intrabar high/low range (ATR, Support/Resistance) currently receive tick-derived bars with high=low=close (a single price tick carries no intrabar range) in **live** mode — the formulas are implemented against the full OHLC contract; **backtests now exercise the real thing**, since synthetic backtest bars have genuine open/high/low/close.
 - Backtesting is single-symbol per run (no multi-asset portfolio backtest) and single-strategy-set (the fixed 8 — no UI to pick a subset or reweight the fusion).
 - No walk-forward/out-of-sample split in the new Backtesting page (the codebase's separate, pre-existing `trading/backtest.py` has `run_walk_forward()` for single-strategy walk-forward testing, untouched by this sprint).
+- Sprint 6's recommended per-strategy fusion weights are not applied to live `DecisionFusion` — the weighted-vs-majority comparison was a near-tie (§5 of the Sprint 6 report), so this is intentionally left as a future decision pending a larger-sample follow-up, not an oversight.
+- Sprint 6's research grid uses a fixed 250-bar budget per (symbol, timeframe) run, which likely under-represents 1H performance (mature strategy warm-up needs more bars at finer timeframes) — a larger 1H-specific bar count is a natural follow-up, not yet done.
 
 ## Sprint history
 
@@ -69,3 +81,4 @@ This is a living snapshot of what actually works in the running application toda
 | 3 | AI Decision Engine — continuous BUY/SELL/HOLD analysis with confidence/reasoning/risk level, real SQLite persistence, advisory-only (no auto-execution) | [SPRINT-3-COMPLETION-REPORT.md](docs/SPRINT-3-COMPLETION-REPORT.md) |
 | 4 | Strategy Engine — 8 independent technical-analysis strategies (RSI, EMA Cross, VWAP, ATR, Bollinger Bands, Support/Resistance, Volume Profile, Trend Detection) + Decision Fusion combining them, no LLMs/external AI | [SPRINT-4-COMPLETION-REPORT.md](docs/SPRINT-4-COMPLETION-REPORT.md) |
 | 5 | Backtesting & Evaluation Framework — replays historical OHLCV through the exact live Strategy Engine/Fusion/PaperBroker, 11 metrics, per-strategy stats, confusion matrix, CSV/JSON export, new UI page | [SPRINT-5-COMPLETION-REPORT.md](docs/SPRINT-5-COMPLETION-REPORT.md) |
+| 6 | Quantitative Research & Strategy Optimization — 243-run study over the frozen Strategy Engine/Fusion via the existing BacktestEngine: per-strategy comparison, fusion-vs-solo, weighted-vs-majority voting, symbol/timeframe breakdowns, recommended weights (research-only, not applied) | [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md) |
