@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Sprint 6 complete)
+**Last updated:** 2026-09-04 (Phase 2 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -52,6 +52,15 @@ This is a living snapshot of what actually works in the running application toda
 - Full raw results (`docs/sprint-6-research-results.json`) and the runner script (`scripts/run_quant_research.py`) are committed for reproducibility — the study is fully deterministic (fixed seed base) and can be re-run to reproduce every number in the report exactly.
 - Full findings, methodology, and every table: [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md).
 
+**Market Regime Engine — new as of Phase 2:**
+- Trading engine, all 8 existing strategies, and Decision Fusion were frozen — no new indicators, no new strategies, no changes to `intelligence/fusion.py`, `trading/strategies/*`, or `backtesting/engine.py`. Verified via `git diff --name-only` scoped to every frozen path immediately before commit: zero changes.
+- New `src/research/regime.py`: causal, bar-by-bar detection of 5 regimes (Trending Bull, Trending Bear, Sideways, High Volatility, Low Volatility) from trailing-window z-scored trend/volatility — no lookahead, defaults to Sideways until enough history exists.
+- New `src/research/regime_router.py`: derives a per-regime, per-strategy routing weight vector from real backtested signal precision (reusing the frozen `backtesting.confusion.compute_confusion_matrix` unmodified), fit on one seed series and evaluated out-of-sample on a different one.
+- New `src/research/regime_backtest.py`: a research-only backtest loop that reimplements `BacktestEngine.run()`'s exact trade-simulation semantics (same `PaperBroker`, same position-sizing) but selects fusion weights per-bar by detected regime — **verified via an automated sanity check to produce trade-for-trade identical output to the frozen `BacktestEngine` at neutral (1.0) weights**, confirming it's a faithful reimplementation, not a divergent one.
+- **Honest result, not spun**: a 48-run comparison grid (8 symbols × 3 timeframes, static vs. regime-aware) shows regime-aware routing essentially tied on Sharpe (0.1723 vs. 0.1715), but *worse* on max drawdown (38.34% vs. 37.72%) and profit factor (1.144 vs. 1.228) than the current static system. **Recommendation: do not deploy regime-aware routing** — the underlying per-regime strategy "edge" scores driving the weights are thin (44%–55%, barely above coin-flip) on this phase's synthetic GBM data, which likely explains the near-tie.
+- Full raw results (`docs/phase-2-regime-results.json`) and the runner script (`scripts/run_regime_research.py`) are committed for reproducibility.
+- Full findings, methodology, and every table: [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md).
+
 ## Known gaps (not yet done, tracked from the audit)
 
 - Trading page BUY/SELL buttons not wired (Paper Trading page covers manual trading for now).
@@ -70,6 +79,7 @@ This is a living snapshot of what actually works in the running application toda
 - No walk-forward/out-of-sample split in the new Backtesting page (the codebase's separate, pre-existing `trading/backtest.py` has `run_walk_forward()` for single-strategy walk-forward testing, untouched by this sprint).
 - Sprint 6's recommended per-strategy fusion weights are not applied to live `DecisionFusion` — the weighted-vs-majority comparison was a near-tie (§5 of the Sprint 6 report), so this is intentionally left as a future decision pending a larger-sample follow-up, not an oversight.
 - Sprint 6's research grid uses a fixed 250-bar budget per (symbol, timeframe) run, which likely under-represents 1H performance (mature strategy warm-up needs more bars at finer timeframes) — a larger 1H-specific bar count is a natural follow-up, not yet done.
+- Phase 2's Market Regime Engine is research-only and not applied to live trading or even to the frozen `BacktestEngine` — the 48-run comparison did not show a clear improvement over the static system (see the Phase 2 section above), so no routing change is recommended for deployment at this time. A follow-up on real historical OHLCV (via the existing `parse_csv_ohlcv` path) rather than synthetic GBM data is flagged as the most promising next step, not yet done.
 
 ## Sprint history
 
@@ -82,3 +92,4 @@ This is a living snapshot of what actually works in the running application toda
 | 4 | Strategy Engine — 8 independent technical-analysis strategies (RSI, EMA Cross, VWAP, ATR, Bollinger Bands, Support/Resistance, Volume Profile, Trend Detection) + Decision Fusion combining them, no LLMs/external AI | [SPRINT-4-COMPLETION-REPORT.md](docs/SPRINT-4-COMPLETION-REPORT.md) |
 | 5 | Backtesting & Evaluation Framework — replays historical OHLCV through the exact live Strategy Engine/Fusion/PaperBroker, 11 metrics, per-strategy stats, confusion matrix, CSV/JSON export, new UI page | [SPRINT-5-COMPLETION-REPORT.md](docs/SPRINT-5-COMPLETION-REPORT.md) |
 | 6 | Quantitative Research & Strategy Optimization — 243-run study over the frozen Strategy Engine/Fusion via the existing BacktestEngine: per-strategy comparison, fusion-vs-solo, weighted-vs-majority voting, symbol/timeframe breakdowns, recommended weights (research-only, not applied) | [SPRINT-6-QUANT-REPORT.md](docs/SPRINT-6-QUANT-REPORT.md) |
+| Phase 2 | Market Regime Engine — causal 5-regime detection, empirically-derived regime routing weights, 48-run regime-aware-vs-static comparison (near-tie, not deployed), verified reimplementation of the frozen BacktestEngine's semantics | [PHASE-2-REGIME-REPORT.md](docs/PHASE-2-REGIME-REPORT.md) |
