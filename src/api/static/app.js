@@ -52,10 +52,20 @@ const DEMO = {
     { id: 'DEC-005', symbol: 'GOOGL', signal: 'HOLD', confidence: 0.45, risk_level: 'LOW', strategy: 'Mean Reversion', time: '10:12', status: 'REJECTED', price: 128.40 },
     { id: 'DEC-006', symbol: 'AMD', signal: 'BUY', confidence: 0.82, risk_level: 'MEDIUM', strategy: 'Momentum Alpha', time: '13:15', status: 'PENDING', price: 142.00 }
   ],
-  ai: { symbol: 'AMD', signal: 'BUY', confidence: 0.82, risk_level: 'MEDIUM', strategy: 'Momentum Alpha',
-    reasoning: 'Strong upward momentum. RSI at 62, MACD bullish crossover. Volume 28% above 20-day average.',
+  ai: { symbol: 'AMD', signal: 'BUY', confidence: 0.82, risk_level: 'MEDIUM', strategy: 'decision_fusion',
+    reasoning: 'Fused decision: BUY (75% weighted agreement). BUY 6/8 (avg 78%): rsi, ema_cross, vwap, bollinger_bands, volume_profile, trend_detection; HOLD 2/8 (avg 40%): atr, support_resistance.',
     risk_factors: ['High volatility (beta 1.8)', 'Semiconductor sector rotation risk', 'Earnings in 5 days'],
     target_price: 155.00, stop_loss: 132.00 },
+  strategyBreakdown: [
+    { strategy: 'rsi', signal: 'BUY', confidence: 0.71, reasoning: 'RSI=28.4 is below the oversold threshold (30) — mean-reversion BUY.' },
+    { strategy: 'ema_cross', signal: 'BUY', confidence: 0.83, reasoning: 'EMA9 crossed above EMA21 this bar (141.20 vs 139.85) — bullish cross.' },
+    { strategy: 'vwap', signal: 'BUY', confidence: 0.68, reasoning: 'Price $142.00 is 0.52% below VWAP $142.75 — BUY (reversion up).' },
+    { strategy: 'atr', signal: 'HOLD', confidence: 0.35, reasoning: 'Price move (0.82x ATR) is below the 1.5x breakout threshold — holding.' },
+    { strategy: 'bollinger_bands', signal: 'BUY', confidence: 0.79, reasoning: 'Price $142.00 is at/below the lower band $141.50 (%B=0.08) — oversold BUY.' },
+    { strategy: 'support_resistance', signal: 'HOLD', confidence: 0.44, reasoning: 'Price $142.00 is mid-range between support $138.20 and resistance $146.80 — holding.' },
+    { strategy: 'volume_profile', signal: 'BUY', confidence: 0.74, reasoning: 'Price $142.00 is 0.61% below the volume point of control $142.87 — BUY.' },
+    { strategy: 'trend_detection', signal: 'BUY', confidence: 0.88, reasoning: 'Upward trend: 0.091%/bar slope, R^2=0.72 over 20 bars — BUY.' }
+  ],
   equity: [100000,100500,101200,100800,101500,102300,103100,102500,104000,105200,104800,106000,107500,108200,107800,109000,110500,111200,110800,112000,113500,114200,113800,115000,116500,117200,116800,118000,119500,120200,120000,121500,122800,123500,123000,124500,125800,126500,126000,127500,128450],
   health: { api: 'HEALTHY', database: 'NOT_CONFIGURED', redis: 'NOT_CONFIGURED', kafka: 'NOT_CONFIGURED', workers: 'HEALTHY', memory: { used: 128, total: 4000, pct: 3.2 }, cpu: { usage: 8.5, cores: 2 } },
   paper: { active: false, start: null, symbols: ['AAPL','MSFT','GOOGL'], capital: 100000, cash: 100000, value: 100000, trades: [], ticks: 0 }
@@ -346,20 +356,21 @@ function selectSymbol(sym, price, change){
 
 // ==================== AI DECISION CENTER ====================
 async function refreshAI(){
-  let ai, historyRecords=[];
+  let ai, historyRecords=[], breakdown=[];
 
   if(demoMode){
     ai = DEMO.ai;
     historyRecords = DEMO.decisions;
+    breakdown = DEMO.strategyBreakdown;
   } else {
     const r = await api('GET','/decisions/?limit=100');
     const records = r.ok ? (r.data.records||[]) : [];
     historyRecords = records; // real records, may be empty
     const latest = records[0]; // store returns newest-first
     // signal (BUY/SELL/HOLD), confidence, and risk_level come from the real
-    // AI Decision Engine (see intelligence/engine.py). No target_price/
-    // stop_loss field exists anywhere in the decision data model — shown
-    // honestly as N/A rather than guessed.
+    // AI Decision Engine + Strategy Engine (see intelligence/engine.py,
+    // intelligence/fusion.py). No target_price/stop_loss field exists
+    // anywhere in the decision data model — shown honestly as N/A.
     ai = latest ? {
       symbol: latest.symbol || '-', signal: latest.signal || null, confidence: latest.confidence||0,
       risk_level: latest.risk_level || null,
@@ -372,6 +383,13 @@ async function refreshAI(){
       reasoning: 'No decisions recorded yet. Start a Paper Trading session to let the AI Decision Engine begin analyzing live prices.',
       risk_factors: [], target_price: null, stop_loss: null
     };
+
+    // Strategy Engine breakdown — every individual strategy's vote behind
+    // the current fused recommendation (GET /decisions/{id}/strategies).
+    if(latest?.decision_id){
+      const br = await api('GET', `/decisions/${latest.decision_id}/strategies`);
+      if(br.ok) breakdown = br.data.results || [];
+    }
   }
 
   const sigEl=document.getElementById('ai-signal');
@@ -403,6 +421,13 @@ async function refreshAI(){
   if(rf) rf.innerHTML = ai.risk_factors.length
     ? ai.risk_factors.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:13px"><span style="color:var(--accent-red)">&#9888;</span>${f}</div>`).join('')
     : '<div style="font-size:13px;color:var(--text-secondary)">No risk checks failed</div>';
+
+  // Strategy Engine breakdown — every independent strategy's vote behind
+  // the current fused recommendation (Sprint 4).
+  const sb=document.getElementById('strategy-breakdown');
+  if(sb) sb.innerHTML = breakdown.length
+    ? breakdown.map(s=>`<tr><td><strong>${s.strategy}</strong></td><td>${signalBadge(s.signal)}</td><td>${((s.confidence||0)*100).toFixed(0)}%</td><td style="color:var(--text-secondary);font-size:12px">${s.reasoning||'-'}</td></tr>`).join('')
+    : '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary);padding:20px">No analysis yet</td></tr>';
 
   // Decision history — demoMode gated; previously leaked DEMO.decisions unconditionally
   const dh=document.getElementById('decision-history');

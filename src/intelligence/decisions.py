@@ -281,7 +281,80 @@ class DecisionStore:
         )
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON decisions(timestamp)")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_symbol ON decisions(symbol)")
+
+        # Every individual Strategy Engine result that fed into a fused
+        # decision (Sprint 4) — one row per (decision, strategy).
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS strategy_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                decision_id TEXT NOT NULL,
+                symbol TEXT,
+                timestamp REAL,
+                strategy TEXT NOT NULL,
+                signal TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                reasoning TEXT NOT NULL
+            )
+            """
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_strategy_results_decision ON strategy_results(decision_id)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_strategy_results_symbol ON strategy_results(symbol, timestamp)"
+        )
         self._conn.commit()
+
+    def save_strategy_results(
+        self,
+        decision_id: str,
+        symbol: str,
+        timestamp: float,
+        results: list[dict[str, Any]],
+    ) -> None:
+        """Persist every individual strategy result behind a fused decision.
+
+        Args:
+            decision_id: The fused DecisionRecord these results fed into.
+            symbol: Trading symbol analyzed.
+            timestamp: Analysis timestamp.
+            results: One dict per strategy with keys 'strategy', 'signal',
+                'confidence', 'reasoning'.
+        """
+        self._conn.executemany(
+            """
+            INSERT INTO strategy_results (decision_id, symbol, timestamp, strategy, signal, confidence, reasoning)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (decision_id, symbol, timestamp, r["strategy"], r["signal"], r["confidence"], r["reasoning"])
+                for r in results
+            ],
+        )
+        self._conn.commit()
+
+    def get_strategy_results(self, decision_id: str) -> list[dict[str, Any]]:
+        """Get every individual strategy result behind one fused decision.
+
+        Args:
+            decision_id: The fused decision to look up.
+
+        Returns:
+            One dict per strategy (strategy, signal, confidence, reasoning),
+            in the order they were recorded.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT strategy, signal, confidence, reasoning
+            FROM strategy_results WHERE decision_id = ? ORDER BY id
+            """,
+            (decision_id,),
+        ).fetchall()
+        return [
+            {"strategy": r[0], "signal": r[1], "confidence": r[2], "reasoning": r[3]}
+            for r in rows
+        ]
 
     def save(self, decision: DecisionRecord) -> None:
         """Save (insert or update) a decision record.

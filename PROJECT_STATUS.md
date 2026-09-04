@@ -1,6 +1,6 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Sprint 3 complete)
+**Last updated:** 2026-09-04 (Sprint 4 complete)
 
 This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
@@ -24,13 +24,14 @@ This is a living snapshot of what actually works in the running application toda
 
 **Reports** — Entirely out of scope so far. No backend exists (zero `/report*` endpoints anywhere). Not silently faked; the page is left as a known gap.
 
-**AI Decision Engine — new as of Sprint 3:**
+**AI Decision Engine + Strategy Engine — Strategy Engine added in Sprint 4:**
 - Runs automatically whenever a Paper Trading session is active, analyzing the same live simulated price ticks the broker fills orders against (`intelligence/engine.py`, subscribed to the feed exactly like `PaperBroker.on_price_tick`).
-- Uses the existing, previously-unused `MomentumStrategy` (real MACD crossover + volume confirmation logic in `trading/strategies/momentum.py`) — not a placeholder or random generator.
-- Every analysis pass records exactly one decision: **BUY**, **SELL**, or **HOLD**, always with a confidence score (0–1), a human-readable reasoning string, and a categorical risk level (LOW/MEDIUM/HIGH, computed from real recent price volatility). While fewer than 35 bars of history exist for a symbol, it honestly records HOLD with a "warming up" reason and low confidence rather than fabricating an early signal.
-- **Advisory only — verified.** After 50+ recorded decisions in a running session, cash and positions were unchanged and trade history was empty: nothing here ever calls `POST /orders/`. Every decision is created with `REVIEW_REQUIRED` status (`DecisionPipeline`), and `POST /decisions/{id}/review` (pre-existing endpoint, now exercised) lets a human mark one reviewed. A human must act through the separate, existing manual Buy/Sell flow to execute anything.
-- Decisions are stored in a real SQLite database (`data/decisions.db`, inside the same mounted volume as the rest of the app's persisted state) — verified to survive a full container restart. Previously, decisions were written one-JSON-file-per-record to a directory outside any mounted volume and were lost on every restart.
-- Displayed in AI Center: Current AI Recommendation (signal, confidence, risk level, reasoning) and Decision History (every recorded decision, with Signal and Risk columns, status shown as "Pending review" until a human reviews it).
+- **Eight independent, modular strategies** (`trading/strategies/{rsi,ema_cross,vwap,atr,bollinger,support_resistance,volume_profile,trend_detection}.py`), each a deterministic, rule-based technical-analysis computation over real price/volume data — RSI, EMA crossover, VWAP deviation, ATR volatility breakout, Bollinger Bands, Support/Resistance proximity, Volume Profile (point of control), and linear-regression Trend Detection. No LLM, no OpenAI, no Claude, no external AI API anywhere in this codebase. Each strategy always returns BUY, SELL, or HOLD with its own confidence and reasoning — never silently skips an analysis pass, even with insufficient history (records an honest low-confidence HOLD instead).
+- **Decision Fusion** (`intelligence/fusion.py`) combines all eight strategies' independent votes into one final recommendation via confidence-weighted majority voting — a transparent, auditable arithmetic rule, not a black box. `MomentumStrategy` (Sprint 3's original single strategy) remains in the codebase but is no longer part of the live fusion; the Strategy Engine replaced it as of this sprint.
+- Every analysis pass records exactly one **fused** decision — BUY, SELL, or HOLD — with a confidence score (0–1), fusion reasoning (which strategies voted which way and by how much), and a categorical risk level (LOW/MEDIUM/HIGH, computed from real recent price volatility) — plus all eight individual strategy results behind it, each separately persisted.
+- **Advisory only — verified.** After 270+ fused decisions (2,160+ individual strategy results) recorded across a running session, cash and positions were unchanged and trade history was empty: nothing here ever calls `POST /orders/`. Every decision is created with `REVIEW_REQUIRED` status (`DecisionPipeline`), and `POST /decisions/{id}/review` (pre-existing endpoint) lets a human mark one reviewed. A human must act through the separate, existing manual Buy/Sell flow to execute anything.
+- Decisions and strategy results are stored in a real SQLite database (`data/decisions.db`, `decisions` and `strategy_results` tables, inside the same mounted volume as the rest of the app's persisted state) — verified to survive a full container restart.
+- Displayed in AI Center: Current AI Recommendation (fused signal, confidence, risk level, fusion reasoning), a new **Strategy Engine Breakdown** table (every one of the 8 strategies' independent signal/confidence/reasoning behind the current recommendation, via `GET /decisions/{id}/strategies`), and Decision History (every fused decision, status shown as "Pending review" until a human reviews it).
 
 ## Known gaps (not yet done, tracked from the audit)
 
@@ -43,7 +44,9 @@ This is a living snapshot of what actually works in the running application toda
 - AI Center's `target_price`/`stop_loss` fields have no source anywhere in the backend's decision data model — shown honestly as N/A, not fabricated. (`signal` is now real as of Sprint 3.)
 - Paper Trading Pause has no backend capability (button exists, does nothing).
 - No UI button yet to mark a decision reviewed from AI Center — the `POST /decisions/{id}/review` endpoint exists and works, just isn't wired to a click.
-- The AI Decision Engine only runs one strategy (Momentum) against a fixed symbol universe; it starts/stops with the Paper Trading session rather than having its own independent lifecycle.
+- The Strategy Engine/AI Decision Engine starts/stops with the Paper Trading session rather than having its own independent lifecycle (no other live market-data source exists to analyze).
+- Strategy Engine runs against a fixed symbol universe (inherited from Paper Trading) — no live quotes/watchlist source exists to justify a larger one.
+- Indicators that classically depend on intrabar high/low range (ATR, Support/Resistance) currently receive tick-derived bars with high=low=close (a single price tick carries no intrabar range) — the formulas are implemented against the full OHLC contract and are forward-compatible with real OHLC bars, but today they're a documented simplification, not a limitation of the math itself.
 
 ## Sprint history
 
@@ -53,3 +56,4 @@ This is a living snapshot of what actually works in the running application toda
 | 1 | Truthfulness/production-safety pass — removed demo-data leaks, wired Dashboard/Trading/Health to real endpoints, fixed the Risk Status hardcode | [SPRINT-1-COMPLETION-REPORT.md](docs/SPRINT-1-COMPLETION-REPORT.md) |
 | 2 | Paper Trading engine — real buy/sell, live positions, real-time P&L, closing positions, trade history | [SPRINT-2-COMPLETION-REPORT.md](docs/SPRINT-2-COMPLETION-REPORT.md) |
 | 3 | AI Decision Engine — continuous BUY/SELL/HOLD analysis with confidence/reasoning/risk level, real SQLite persistence, advisory-only (no auto-execution) | [SPRINT-3-COMPLETION-REPORT.md](docs/SPRINT-3-COMPLETION-REPORT.md) |
+| 4 | Strategy Engine — 8 independent technical-analysis strategies (RSI, EMA Cross, VWAP, ATR, Bollinger Bands, Support/Resistance, Volume Profile, Trend Detection) + Decision Fusion combining them, no LLMs/external AI | [SPRINT-4-COMPLETION-REPORT.md](docs/SPRINT-4-COMPLETION-REPORT.md) |

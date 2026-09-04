@@ -143,6 +143,8 @@ async def get_decision(decision_id: str, request: Request) -> dict:
             "feature_vector": record.feature_vector.__dict__ if record.feature_vector else None,
             "reasoning_summary": record.reasoning_summary,
             "confidence_score": record.confidence_score,
+            "signal": record.signal,
+            "risk_level": record.risk_level,
             "selected_strategy": record.selected_strategy,
             "risk_assessment": record.risk_assessment.__dict__ if record.risk_assessment else None,
             "portfolio_state": record.portfolio_state.__dict__ if record.portfolio_state else None,
@@ -152,6 +154,23 @@ async def get_decision(decision_id: str, request: Request) -> dict:
         }
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{decision_id}/strategies")
+async def get_decision_strategies(decision_id: str, request: Request) -> dict:
+    """Get every individual Strategy Engine result behind a fused decision.
+
+    Viewer+. Each entry is one strategy's independent BUY/SELL/HOLD
+    signal, confidence, and reasoning — the raw votes DecisionFusion
+    combined into the final decision.
+    """
+    get_current_user(request)  # Any authenticated user
+    try:
+        store: DecisionStore = get_component(request, "decision_store")
+        results = store.get_strategy_results(decision_id)
+        return {"decision_id": decision_id, "count": len(results), "results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

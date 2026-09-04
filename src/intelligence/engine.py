@@ -1,15 +1,22 @@
 """AI Decision Engine.
 
-Continuously analyzes live (simulated) market price ticks and records a
-BUY/SELL/HOLD recommendation — with a confidence score, human-readable
-reasoning, and a risk level — for every analysis pass. Every decision is
-persisted via the existing DecisionPipeline/DecisionStore.
+Continuously analyzes live (simulated) market price ticks by running
+every strategy in the modular Strategy Engine (see trading/strategies/)
+independently, fusing their BUY/SELL/HOLD outputs into one final
+recommendation via DecisionFusion, and persisting both — every
+individual strategy result and the final fused decision — through the
+existing DecisionPipeline/DecisionStore.
+
+No LLM, no OpenAI, no Claude, no external AI API of any kind is used
+anywhere in this module or the strategies it runs. Every signal is a
+deterministic, rule-based technical-analysis computation over real
+price/volume data.
 
 Advisory only. This module never submits an order and never touches the
-broker. DecisionPipeline.record_decision() marks every decision it saves
-as REVIEW_REQUIRED — a human must act through the separate, existing
-manual Buy/Sell flow (Paper Trading page) to execute anything based on a
-recommendation.
+broker. DecisionPipeline.record_decision() marks every fused decision it
+saves as REVIEW_REQUIRED — a human must act through the separate,
+existing manual Buy/Sell flow (Paper Trading page) to execute anything
+based on a recommendation.
 
 The engine consumes real-time market data via the same price-tick
 callback mechanism already used by PaperBroker (see
@@ -27,22 +34,41 @@ from typing import Any
 
 import pandas as pd
 
+from intelligence.fusion import DecisionFusion
 from market.connectors.base import PriceTick
 from system.decision_pipeline import DecisionPipeline, PipelineContext
 from trading.base_strategy import BaseStrategy
-from trading.schemas import SignalDirection
-from trading.strategies.momentum import MomentumStrategy
+from trading.schemas import SignalDirection, StrategySignal
+from trading.strategies.atr import ATRStrategy
+from trading.strategies.bollinger import BollingerBandsStrategy
+from trading.strategies.ema_cross import EMACrossStrategy
+from trading.strategies.rsi import RSIStrategy
+from trading.strategies.support_resistance import SupportResistanceStrategy
+from trading.strategies.trend_detection import TrendDetectionStrategy
+from trading.strategies.volume_profile import VolumeProfileStrategy
+from trading.strategies.vwap import VWAPStrategy
 
 logger = logging.getLogger(__name__)
 
-# MomentumStrategy needs 35+ bars for its MACD(12,26,9) computation to be
-# meaningful; analyzing sooner would just be noise dressed up as a signal.
-_MIN_BARS_FOR_STRATEGY = 35
 _MAX_BARS_PER_SYMBOL = 200
 _MIN_SECONDS_BETWEEN_DECISIONS = 3.0
 
 _RISK_VOL_LOW = 0.01
 _RISK_VOL_HIGH = 0.03
+
+
+def _default_strategies() -> list[BaseStrategy]:
+    """The eight Strategy Engine members, each independent and self-contained."""
+    return [
+        RSIStrategy(),
+        EMACrossStrategy(),
+        VWAPStrategy(),
+        ATRStrategy(),
+        BollingerBandsStrategy(),
+        SupportResistanceStrategy(),
+        VolumeProfileStrategy(),
+        TrendDetectionStrategy(),
+    ]
 
 
 @dataclass
@@ -54,7 +80,7 @@ class _SymbolState:
 
 
 class AIDecisionEngine:
-    """Analyzes every incoming price tick and records a decision.
+    """Runs the Strategy Engine on every incoming price tick and fuses it.
 
     Not a standalone data source: register ``on_price_tick`` as a feed
     callback (the same pattern PaperBroker uses) so the engine sees
@@ -64,16 +90,18 @@ class AIDecisionEngine:
     def __init__(
         self,
         pipeline: DecisionPipeline,
-        strategy: BaseStrategy | None = None,
+        strategies: list[BaseStrategy] | None = None,
+        fusion: DecisionFusion | None = None,
     ) -> None:
         self.pipeline = pipeline
-        self.strategy: BaseStrategy = strategy or MomentumStrategy()
+        self.strategies: list[BaseStrategy] = strategies or _default_strategies()
+        self.fusion = fusion or DecisionFusion()
         self._symbols: dict[str, _SymbolState] = {}
         self._decision_count = 0
 
     @property
     def decision_count(self) -> int:
-        """Total decisions recorded by this engine instance."""
+        """Total fused decisions recorded by this engine instance."""
         return self._decision_count
 
     def on_price_tick(self, tick: PriceTick) -> None:
@@ -104,32 +132,37 @@ class AIDecisionEngine:
         except Exception:
             logger.exception("AI decision engine failed analyzing %s", tick.symbol)
 
-    def _analyze(self, symbol: str, state: _SymbolState) -> None:
-        """Run one analysis pass and record its BUY/SELL/HOLD decision."""
-        df = pd.DataFrame(list(state.bars))
-        n = len(df)
+    def _run_strategy_engine(self, symbol: str, df: pd.DataFrame) -> list[StrategySignal]:
+        """Run every strategy independently; each always yields a signal.
 
-        if n < _MIN_BARS_FOR_STRATEGY:
-            direction = SignalDirection.HOLD
-            confidence = round(0.3 * (n / _MIN_BARS_FOR_STRATEGY), 2)
-            reason = (
-                f"Warming up: {n}/{_MIN_BARS_FOR_STRATEGY} price bars collected — "
-                f"not enough history yet for {self.strategy.name} analysis."
-            )
-        else:
-            signal = self.strategy.generate_signal(df, features={})
-            if signal is not None:
-                direction = signal.direction
-                confidence = signal.confidence
-                reason = signal.reason
-            else:
-                direction = SignalDirection.HOLD
-                confidence = 0.5
-                reason = (
-                    f"No {self.strategy.name} crossover or volume confirmation on "
-                    f"this bar — holding."
+        A strategy that raises is treated as an explicit low-confidence
+        HOLD rather than being silently dropped — one broken strategy
+        must not shrink the vote or crash the analysis pass.
+        """
+        signals: list[StrategySignal] = []
+        for strategy in self.strategies:
+            try:
+                signal = strategy.generate_signal(df, features={})
+            except Exception:
+                logger.exception("Strategy %s failed analyzing %s", strategy.name, symbol)
+                signal = None
+            if signal is None:
+                signal = StrategySignal(
+                    symbol=symbol,
+                    direction=SignalDirection.HOLD,
+                    confidence=0.0,
+                    reason=f"{strategy.name} raised an error and produced no signal.",
+                    strategy_name=strategy.name,
                 )
+            signals.append(signal)
+        return signals
 
+    def _analyze(self, symbol: str, state: _SymbolState) -> None:
+        """Run one full Strategy Engine + Fusion pass and record it."""
+        df = pd.DataFrame(list(state.bars))
+
+        signals = self._run_strategy_engine(symbol, df)
+        fused = self.fusion.combine(signals)
         risk_level = self._assess_risk_level(df)
 
         context = PipelineContext(
@@ -137,15 +170,32 @@ class AIDecisionEngine:
             price=float(df["close"].iloc[-1]),
             timestamp=time.time(),
             features={},
-            strategy_name=self.strategy.name,
+            strategy_name="decision_fusion",
         )
-        self.pipeline.record_decision(
+        record = self.pipeline.record_decision(
             context,
-            reasoning=reason,
-            confidence=confidence,
-            signal=direction.value,
+            reasoning=fused.reasoning,
+            confidence=fused.confidence,
+            signal=fused.direction.value,
             risk_level=risk_level,
         )
+
+        # Store every individual strategy result behind this fused decision.
+        self.pipeline.store.save_strategy_results(
+            decision_id=record.decision_id,
+            symbol=symbol,
+            timestamp=record.timestamp,
+            results=[
+                {
+                    "strategy": s.strategy_name,
+                    "signal": s.direction.value,
+                    "confidence": s.confidence,
+                    "reasoning": s.reason,
+                }
+                for s in signals
+            ],
+        )
+
         self._decision_count += 1
 
     @staticmethod
@@ -174,5 +224,5 @@ class AIDecisionEngine:
         return {
             "decisions_recorded": self._decision_count,
             "symbols_tracked": list(self._symbols.keys()),
-            "strategy": self.strategy.name,
+            "strategies": [s.name for s in self.strategies],
         }
