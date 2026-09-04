@@ -36,9 +36,9 @@ async def list_orders(request: Request) -> dict:
     get_current_user(request)  # Any authenticated user
     try:
         broker: BrokerConnector = get_component(request, "broker")
-        # PaperBroker stores orders in _orders list
+        # PaperBroker stores orders in a {order_id: Order} dict
         if hasattr(broker, "_orders"):
-            orders = broker._orders
+            orders = list(broker._orders.values())
             return {
                 "count": len(orders),
                 "orders": [
@@ -52,6 +52,8 @@ async def list_orders(request: Request) -> dict:
                         "status": o.status.name if hasattr(o.status, "name") else str(o.status),
                         "limit_price": o.limit_price,
                         "stop_price": o.stop_price,
+                        "avg_fill_price": o.metadata.get("avg_fill_price"),
+                        "commission": o.metadata.get("commission"),
                         "created_at": o.created_at.isoformat() if hasattr(o.created_at, "isoformat") else str(o.created_at),
                     }
                     for o in orders
@@ -78,12 +80,13 @@ async def get_order_history(
             return {"count": 0, "orders": [], "total": 0, "offset": offset, "limit": limit}
 
         orders = list(broker._orders.values())
+        orders.sort(key=lambda o: o.created_at, reverse=True)  # newest first
         # Filter by symbol
         if symbol:
             orders = [o for o in orders if o.symbol.upper() == symbol.upper()]
         # Filter by status
         if status:
-            orders = [o for o in orders if str(o.status).upper() == status.upper()]
+            orders = [o for o in orders if str(o.status.name if hasattr(o.status, "name") else o.status).upper() == status.upper()]
 
         total = len(orders)
         paginated = orders[offset:offset + limit]
@@ -104,6 +107,8 @@ async def get_order_history(
                     "status": o.status.name if hasattr(o.status, "name") else str(o.status),
                     "limit_price": o.limit_price,
                     "stop_price": o.stop_price,
+                    "avg_fill_price": o.metadata.get("avg_fill_price"),
+                    "commission": o.metadata.get("commission"),
                     "created_at": o.created_at.isoformat() if hasattr(o.created_at, "isoformat") else str(o.created_at),
                 }
                 for o in paginated
@@ -120,20 +125,22 @@ async def get_order(order_id: str, request: Request) -> dict:
     try:
         broker: BrokerConnector = get_component(request, "broker")
         if hasattr(broker, "_orders"):
-            for o in broker._orders:
-                if o.order_id == order_id:
-                    return {
-                        "order_id": o.order_id,
-                        "symbol": o.symbol,
-                        "side": o.side.name if hasattr(o.side, "name") else str(o.side),
-                        "order_type": o.order_type.name if hasattr(o.order_type, "name") else str(o.order_type),
-                        "quantity": o.quantity,
-                        "filled_quantity": o.filled_quantity,
-                        "status": o.status.name if hasattr(o.status, "name") else str(o.status),
-                        "limit_price": o.limit_price,
-                        "stop_price": o.stop_price,
-                        "created_at": o.created_at.isoformat() if hasattr(o.created_at, "isoformat") else str(o.created_at),
-                    }
+            o = broker._orders.get(order_id)
+            if o is not None:
+                return {
+                    "order_id": o.order_id,
+                    "symbol": o.symbol,
+                    "side": o.side.name if hasattr(o.side, "name") else str(o.side),
+                    "order_type": o.order_type.name if hasattr(o.order_type, "name") else str(o.order_type),
+                    "quantity": o.quantity,
+                    "filled_quantity": o.filled_quantity,
+                    "status": o.status.name if hasattr(o.status, "name") else str(o.status),
+                    "limit_price": o.limit_price,
+                    "stop_price": o.stop_price,
+                    "avg_fill_price": o.metadata.get("avg_fill_price"),
+                    "commission": o.metadata.get("commission"),
+                    "created_at": o.created_at.isoformat() if hasattr(o.created_at, "isoformat") else str(o.created_at),
+                }
         raise HTTPException(status_code=404, detail="Order not found")
     except HTTPException:
         raise

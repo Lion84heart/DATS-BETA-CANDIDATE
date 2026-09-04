@@ -406,23 +406,25 @@ async function refreshAI(){
 }
 
 // ==================== PAPER TRADING ====================
+// Tradable symbols for the currently running session (real, from the backend
+// — never a hardcoded/demo list). Manual trading is only enabled in Live Mode.
+let paperSymbols = [];
+
 async function refreshPaper(){
-  let pt, config=null;
+  let pt, symbols=[], historyOrders=[];
 
   if(demoMode){
     pt=DEMO.paper;
   } else {
     const r = await api('GET','/execution/paper/status');
-    if(r.ok && r.data.running){
-      const acct = r.data.account || {};
-      pt = {
-        active: true, capital: r.data.config?.initial_capital||0, cash: acct.cash||0,
-        value: acct.total_value||0, trades: [], ticks: acct.tick_count||0
-      };
-      config = r.data.config;
-    } else {
-      pt = {active:false, capital:0, cash:0, value:0, trades:[], ticks:0};
-    }
+    const acct = (r.ok && r.data.account) ? r.data.account : {};
+    symbols = (r.ok && r.data.symbols) ? r.data.symbols : [];
+    const hr = await api('GET','/orders/history?limit=20');
+    historyOrders = hr.ok ? (hr.data.orders||[]) : [];
+    pt = {
+      active: !!(r.ok && r.data.running), capital: acct.initial_capital||0, cash: acct.cash||0,
+      value: acct.total_value||0, filledCount: historyOrders.filter(o=>o.status==='FILLED').length
+    };
   }
 
   setText('paper-status', pt.active?'RUNNING':'STOPPED');
@@ -430,51 +432,71 @@ async function refreshPaper(){
   if(ps) ps.className='badge '+(pt.active?'badge-green':'badge-gray');
 
   setText('paper-capital', fmt.money(pt.capital));
-  setText('paper-cash', fmt.money(pt.cash));
   setText('paper-value', fmt.money(pt.value));
   setText('paper-pnl', fmt.moneySigned(pt.value-pt.capital));
-  setText('paper-trades', pt.trades.length);
-  setText('paper-ticks', pt.ticks);
+  setText('paper-trades', demoMode ? pt.trades.length : pt.filledCount);
 
-  // Session Configuration card
-  const symbolsEl=document.getElementById('paper-config-symbols');
-  const tickEl=document.getElementById('paper-config-tick');
-  if(demoMode){
-    if(symbolsEl) symbolsEl.textContent='AAPL, MSFT, GOOGL';
-    if(tickEl) tickEl.textContent='1.0s';
-  } else if(config){
-    if(symbolsEl) symbolsEl.textContent=(config.symbols||[]).join(', ')||'-';
-    if(tickEl) tickEl.textContent=(config.tick_interval!=null?config.tick_interval:'-')+'s';
-  } else {
-    if(symbolsEl) symbolsEl.textContent='-';
-    if(tickEl) tickEl.textContent='-';
+  // Order entry — symbol list comes from the real running session; manual
+  // trading requires an active (RUNNING) session and is disabled in Demo
+  // Mode (it never touches the real backend). Note: the feed's subscribed-
+  // symbols set isn't cleared on stop, only its "active" flag — so the
+  // session-active check is required, not just a non-empty symbol list.
+  const sessionActive = !demoMode && pt.active;
+  paperSymbols = demoMode ? (DEMO.paper.symbols||[]) : (sessionActive ? symbols : []);
+  const symSel=document.getElementById('order-symbol');
+  const buyBtn=document.getElementById('order-buy-btn');
+  const sellBtn=document.getElementById('order-sell-btn');
+  const qtyInput=document.getElementById('order-qty');
+  const orderMsg=document.getElementById('order-message');
+  if(symSel){
+    const prev=symSel.value;
+    symSel.innerHTML = paperSymbols.length
+      ? paperSymbols.map(s=>`<option value="${s}">${s}</option>`).join('')
+      : '<option value="">No symbols — start a session</option>';
+    if(paperSymbols.includes(prev)) symSel.value=prev;
+  }
+  const tradingEnabled = paperSymbols.length>0 && sessionActive;
+  if(symSel) symSel.disabled = paperSymbols.length===0;
+  if(qtyInput) qtyInput.disabled = paperSymbols.length===0;
+  if(buyBtn) buyBtn.disabled = !tradingEnabled;
+  if(sellBtn) sellBtn.disabled = !tradingEnabled;
+  if(orderMsg && orderMsg.dataset.sticky!=='1'){
+    orderMsg.textContent = demoMode ? 'Manual trading is disabled in Demo Mode.'
+      : (tradingEnabled ? '' : 'Start a session to enable trading.');
+    orderMsg.style.color='var(--text-secondary)';
   }
 
-  // Activity log — no trade-by-trade activity feed endpoint exists yet (see audit
-  // report, P2 item); shown honestly rather than fabricated canned entries.
-  const log=document.getElementById('paper-activity');
-  if(log){
-    if(demoMode && (pt.active || pt.trades.length)){
-      const items=[
-        {t:'09:30:00',icon:'&#9654;',text:'Session started with $100,000 capital'},
-        {t:'09:30:15',icon:'&#128722;',text:'BUY 50 AAPL @ $182.50 (Market)'},
-        {t:'09:35:22',icon:'&#128722;',text:'BUY 30 MSFT @ $320.00 (Limit)'},
-        {t:'10:15:08',icon:'&#128722;',text:'BUY 25 GOOGL @ $130.00 (Market)'},
-        {t:'11:00:45',icon:'&#128722;',text:'BUY 20 TSLA @ $240.00 (Market)'},
-        {t:'14:30:10',icon:'&#128176;',text:'SELL 15 NVDA @ $465.00 (Limit) +$675.00'},
-      ];
-      log.innerHTML=items.map(i=>`<div class="activity-item"><span class="activity-time">${i.t}</span><span class="activity-icon">${i.icon}</span><span class="activity-text">${i.text}</span></div>`).join('');
-    } else if(pt.active){
-      log.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">Session running. Trade-by-trade activity feed is not yet available (tracked in the CTO audit report).</div>';
+  // Open Positions
+  const posBody=document.getElementById('paper-positions-body');
+  if(posBody){
+    if(demoMode){
+      posBody.innerHTML = DEMO.positions.length ? DEMO.positions.map(p=>`<tr><td><strong>${p.symbol}</strong></td><td>${p.quantity}</td><td>$${p.avg_price.toFixed(2)}</td><td>$${p.current_price.toFixed(2)}</td><td style="color:${p.mtm>=0?'var(--accent-green)':'var(--accent-red)'}">${p.mtm>=0?'+':''}$${p.mtm.toFixed(2)}</td><td></td></tr>`).join('')
+        : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No open positions</td></tr>';
     } else {
-      log.innerHTML='<div style="text-align:center;color:var(--text-secondary);padding:40px">No paper trading activity. Start a session to see live data.</div>';
+      const pr = await api('GET','/portfolio/');
+      const positions = pr.ok ? (pr.data.positions||[]) : [];
+      posBody.innerHTML = positions.length
+        ? positions.map(p=>`<tr><td><strong>${p.symbol}</strong></td><td>${p.quantity}</td><td>$${p.avg_entry_price.toFixed(2)}</td><td>$${p.market_price.toFixed(2)}</td><td style="color:${p.unrealized_pnl>=0?'var(--accent-green)':'var(--accent-red)'}">${p.unrealized_pnl>=0?'+':''}$${p.unrealized_pnl.toFixed(2)}</td><td><button class="btn-small btn-outline" onclick="closePosition('${p.symbol}',${p.quantity})">Close</button></td></tr>`).join('')
+        : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No open positions</td></tr>';
+    }
+  }
+
+  // Trade History — real filled/rejected orders from GET /orders/history
+  const histBody=document.getElementById('paper-history-body');
+  if(histBody){
+    if(demoMode){
+      histBody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px">Trade history is not simulated in Demo Mode</td></tr>';
+    } else {
+      histBody.innerHTML = historyOrders.length
+        ? historyOrders.map(o=>`<tr><td>${o.created_at?new Date(o.created_at).toLocaleTimeString():'-'}</td><td><strong>${o.symbol}</strong></td><td><span class="badge ${o.side==='BUY'?'badge-green':'badge-red'}">${o.side}</span></td><td>${o.quantity}</td><td>${o.avg_fill_price!=null?'$'+o.avg_fill_price.toFixed(2):'-'}</td><td>${o.commission!=null?'$'+o.commission.toFixed(2):'-'}</td><td><span class="badge ${o.status==='FILLED'?'badge-green':'badge-red'}">${o.status}</span></td></tr>`).join('')
+        : '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px">No trades yet</td></tr>';
     }
   }
 }
 
 async function paperStart(){
   if(demoMode){ DEMO.paper.active=true; DEMO.paper.start=new Date().toISOString(); refreshPaper(); return; }
-  const r=await api('POST','/execution/paper/start',{symbols:['AAPL','MSFT','GOOGL'],initial_capital:100000});
+  const r=await api('POST','/execution/paper/start',{symbols:['AAPL','MSFT','GOOGL'],tick_interval:1.0});
   if(r.ok){ refreshPaper(); } else { alert('Failed to start: '+(r.data.detail||r.error)); }
 }
 
@@ -487,6 +509,52 @@ async function paperStop(){
   if(demoMode){ DEMO.paper.active=false; refreshPaper(); return; }
   const r=await api('POST','/execution/paper/stop');
   if(r.ok){ refreshPaper(); }
+}
+
+async function placeOrder(side){
+  const symEl=document.getElementById('order-symbol');
+  const qtyEl=document.getElementById('order-qty');
+  const msgEl=document.getElementById('order-message');
+  const symbol=symEl?symEl.value:'';
+  const qty=qtyEl?parseFloat(qtyEl.value):0;
+  if(!symbol || !qty || qty<=0){
+    if(msgEl){ msgEl.textContent='Choose a symbol and a positive quantity.'; msgEl.style.color='var(--accent-red)'; }
+    return;
+  }
+  if(msgEl){ msgEl.dataset.sticky='1'; msgEl.textContent='Submitting...'; msgEl.style.color='var(--text-secondary)'; }
+  const r=await api('POST','/orders/',{symbol, side, order_type:'market', quantity:qty});
+  await refreshPaper();
+  if(msgEl){
+    if(r.ok && r.data.status==='filled'){
+      msgEl.textContent=`Filled: ${side.toUpperCase()} ${qty} ${symbol} @ $${(r.data.avg_fill_price||0).toFixed(2)}`;
+      msgEl.style.color='var(--accent-green)';
+    } else {
+      msgEl.textContent=r.data.message||r.data.detail||r.error||'Order rejected';
+      msgEl.style.color='var(--accent-red)';
+    }
+    delete msgEl.dataset.sticky;
+  }
+  if(currentScreen==='dashboard') refreshDashboard();
+  if(currentScreen==='trading') refreshTrading();
+}
+
+async function closePosition(symbol, quantity){
+  const msgEl=document.getElementById('order-message');
+  const r=await api('POST','/orders/',{symbol, side:'sell', order_type:'market', quantity});
+  await refreshPaper();
+  if(msgEl){
+    msgEl.dataset.sticky='1';
+    if(r.ok && r.data.status==='filled'){
+      msgEl.textContent=`Closed ${symbol}: sold ${quantity} @ $${(r.data.avg_fill_price||0).toFixed(2)}`;
+      msgEl.style.color='var(--accent-green)';
+    } else {
+      msgEl.textContent=r.data.message||r.data.detail||r.error||'Failed to close position';
+      msgEl.style.color='var(--accent-red)';
+    }
+    delete msgEl.dataset.sticky;
+  }
+  if(currentScreen==='dashboard') refreshDashboard();
+  if(currentScreen==='trading') refreshTrading();
 }
 
 // ==================== SYSTEM HEALTH ====================
@@ -653,6 +721,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if(pp) pp.addEventListener('click',paperPause);
   const pst=document.getElementById('paper-stop-btn');
   if(pst) pst.addEventListener('click',paperStop);
+  const obuy=document.getElementById('order-buy-btn');
+  if(obuy) obuy.addEventListener('click',()=>placeOrder('buy'));
+  const osell=document.getElementById('order-sell-btn');
+  if(osell) osell.addEventListener('click',()=>placeOrder('sell'));
 
   // Tabs
   document.querySelectorAll('.tab').forEach(t=>{

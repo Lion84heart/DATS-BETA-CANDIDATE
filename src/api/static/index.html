@@ -214,16 +214,31 @@
         </div>
         <div class="grid grid-2">
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Session Configuration</div></div></div>
-            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Symbols</span><strong id="paper-config-symbols">AAPL, MSFT, GOOGL</strong></div></div>
-            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Tick Interval</span><strong id="paper-config-tick">1.0s</strong></div></div>
-            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Capital Allocation</span><strong>100%</strong></div></div>
-            <div style="padding:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-color)"><span>Simulation Mode</span><strong>Paper Broker</strong></div></div>
+            <div class="card-header"><div><div class="card-title">Place Order</div><div class="card-subtitle">Market order, filled against the live simulated price</div></div></div>
+            <div style="padding:12px 0">
+              <div class="form-group">
+                <label>Symbol</label>
+                <select id="order-symbol" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)"></select>
+              </div>
+              <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="order-qty" min="1" step="1" value="1" style="width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary)">
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn-small btn-green" id="order-buy-btn" style="flex:1">BUY</button>
+                <button class="btn-small btn-red" id="order-sell-btn" style="flex:1">SELL</button>
+              </div>
+              <div id="order-message" style="font-size:12px;margin-top:10px;min-height:16px"></div>
+            </div>
           </div>
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Live Activity</div></div></div>
-            <div class="activity-log" id="paper-activity"><div style="text-align:center;color:var(--text-secondary);padding:40px">No paper trading activity. Start a session to see live data.</div></div>
+            <div class="card-header"><div><div class="card-title">Open Positions</div></div></div>
+            <table class="data-table"><thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Current</th><th>P&L</th><th></th></tr></thead><tbody id="paper-positions-body"><tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No open positions</td></tr></tbody></table>
           </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">Trade History</div><div class="card-subtitle">Filled and rejected order attempts</div></div></div>
+          <table class="data-table"><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Commission</th><th>Status</th></tr></thead><tbody id="paper-history-body"><tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:20px">No trades yet</td></tr></tbody></table>
         </div>
       </div>
 

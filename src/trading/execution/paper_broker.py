@@ -6,13 +6,14 @@ at risk. Uses slippage and commission models from production.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from dataclasses import dataclass, field
 
 from market.connectors.base import PriceTick
 from trading.execution.broker_base import BrokerConnector, BrokerOrderResult, BrokerPosition
 from trading.execution.fills import FillSimulator
-from trading.execution.orders import Order, OrderSide
+from trading.execution.orders import Order, OrderSide, OrderStatus
 from trading.execution.slippage import FixedSlippage
 
 
@@ -109,6 +110,19 @@ class PaperBroker(BrokerConnector):
         """Paper broker disconnect is a no-op."""
         self._connected = False
 
+    def _reject(self, order: Order, order_id: str, reason: str) -> BrokerOrderResult:
+        """Record a rejected order and return its result.
+
+        Rejections are tracked in ``_orders``/``_order_history`` alongside
+        fills so order history/status reflect every real submission
+        attempt, not just successful ones.
+        """
+        rejected = dataclasses.replace(order, order_id=order_id, status=OrderStatus.REJECTED)
+        self._orders[order_id] = rejected
+        result = BrokerOrderResult(order_id=order_id, status="rejected", message=reason)
+        self._order_history.append(result)
+        return result
+
     async def submit_order(self, order: Order) -> BrokerOrderResult:
         """Simulate order fill.
 
@@ -118,12 +132,11 @@ class PaperBroker(BrokerConnector):
         Returns:
             BrokerOrderResult with simulated fill.
         """
+        order_id = order.order_id or str(uuid.uuid4())
+        order = dataclasses.replace(order, order_id=order_id)
+
         if order.symbol not in self._last_price:
-            return BrokerOrderResult(
-                order_id=str(uuid.uuid4()),
-                status="rejected",
-                message=f"No price data for {order.symbol}",
-            )
+            return self._reject(order, order_id, f"No price data for {order.symbol}")
 
         price = self._last_price[order.symbol]
         qty = float(order.quantity)
@@ -140,11 +153,14 @@ class PaperBroker(BrokerConnector):
 
         # Check buying power for buy orders
         if order.side == OrderSide.BUY and total_cost > self.account.cash:
-            return BrokerOrderResult(
-                order_id=str(uuid.uuid4()),
-                status="rejected",
-                message=f"Insufficient cash: {self.account.cash} < {total_cost}",
-            )
+            return self._reject(order, order_id, f"Insufficient cash: {self.account.cash} < {total_cost}")
+
+        # Check held quantity for sell orders — paper trading has no shorting
+        if order.side == OrderSide.SELL:
+            held = self.account.positions.get(order.symbol)
+            held_qty = held.quantity if held else 0.0
+            if qty > held_qty:
+                return self._reject(order, order_id, f"Cannot sell {qty} {order.symbol}: only {held_qty} held")
 
         # Update account cash
         if order.side == OrderSide.BUY:
@@ -189,8 +205,15 @@ class PaperBroker(BrokerConnector):
                     realized_pnl=0.0,
                 )
 
+        filled_order = order.with_fill(qty, fill_price)
+        filled_order = dataclasses.replace(
+            filled_order,
+            metadata={**filled_order.metadata, "commission": commission},
+        )
+        self._orders[order_id] = filled_order
+
         result = BrokerOrderResult(
-            order_id=str(uuid.uuid4()),
+            order_id=order_id,
             status="filled",
             filled_qty=qty,
             avg_fill_price=fill_price,
@@ -224,6 +247,7 @@ class PaperBroker(BrokerConnector):
             "paper_mode": self.paper_mode,
             "connected": self._connected,
             "cash": self.account.cash,
+            "initial_capital": self.account.initial_capital,
             "total_value": self.account.total_value,
             "total_pnl": self.account.total_pnl,
             "total_return_pct": self.account.total_return_pct,

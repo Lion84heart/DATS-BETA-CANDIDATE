@@ -1,4 +1,14 @@
-"""Execution control API router."""
+"""Execution control API router.
+
+Controls the simulated price feed that drives the paper trading
+broker. "Starting" a paper trading session subscribes a set of
+symbols on a simulated market data connector and starts streaming
+ticks into the same ``broker`` component used by /orders, /portfolio
+and /positions — there is a single, shared paper account, not a
+separate one per session. This keeps every widget (Dashboard, Trading,
+Paper Trading) reading a consistent, real state instead of two
+disconnected broker instances.
+"""
 
 from __future__ import annotations
 
@@ -6,18 +16,28 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth import UserRole, get_current_user, get_user_from_token, has_permission, record_audit
-from trading.execution.paper_trading import PaperTradingConfig, PaperTradingMode
+from api.dependencies import get_component
+from market.connectors.simulated import SimulatedConnector
+from market.feed import FeedManager
+from trading.execution.paper_broker import PaperBroker
 
 router = APIRouter(prefix="/execution", tags=["execution"])
 
+# Starting prices for the simulated connector when a symbol is traded for
+# the first time. This is a simulation parameter for the paper-trading price
+# generator (same role as SimulatedConnector's own built-in 100.0 default for
+# unlisted symbols) — not data displayed anywhere as if it were a live quote.
+_DEFAULT_SEED_PRICES: dict[str, float] = {
+    "AAPL": 182.50, "MSFT": 335.80, "GOOGL": 128.40, "TSLA": 255.30,
+    "NVDA": 465.00, "AMZN": 158.00, "META": 510.00, "AMD": 142.00,
+}
+
 
 class PaperTradingStartRequest(BaseModel):
-    """Request to start paper trading."""
+    """Request to start the simulated price feed for paper trading."""
 
-    symbols: list[str] = ["AAPL"]
-    initial_capital: float = 100000.0
+    symbols: list[str] = ["AAPL", "MSFT", "GOOGL"]
     tick_interval: float = 1.0
-    lookback: int = 20
 
 
 @router.post("/paper/start")
@@ -25,44 +45,48 @@ async def start_paper_trading(
     request: Request,
     req: PaperTradingStartRequest | None = None,
 ) -> dict:
-    """Start paper trading mode. Operator+."""
+    """Start streaming simulated prices for the given symbols. Operator+.
+
+    Fills the same ``broker`` component read by /orders, /portfolio, and
+    /positions — so orders submitted after this call can actually fill
+    (PaperBroker rejects orders for symbols with no price data), and
+    open positions start receiving real-time unrealized P&L updates.
+    """
     current_user = get_current_user(request)
     if not has_permission(current_user, UserRole.OPERATOR):
         raise HTTPException(status_code=403, detail="Operator access required")
     try:
         if req is None:
             req = PaperTradingStartRequest()
+        symbols = [s.upper() for s in req.symbols] or ["AAPL"]
 
-        if hasattr(request.app.state, "paper_mode") and request.app.state.paper_mode is not None:
-            if request.app.state.paper_mode._running:
-                raise HTTPException(status_code=409, detail="Paper trading already running")
+        feed: FeedManager = get_component(request, "feed")
+        broker: PaperBroker = get_component(request, "broker")
 
-        config = PaperTradingConfig(
-            symbols=req.symbols,
-            initial_capital=req.initial_capital,
-            tick_interval=req.tick_interval,
-            lookback=req.lookback,
-        )
-        mode = PaperTradingMode(config)
-        ok = await mode.start()
+        if feed.get_state().active:
+            raise HTTPException(status_code=409, detail="Paper trading feed already running")
+
+        connector = SimulatedConnector(tick_interval=req.tick_interval)
+        for symbol in symbols:
+            connector.configure_symbol(symbol, _DEFAULT_SEED_PRICES.get(symbol, 100.0))
+
+        feed.register_connector(connector, primary=True)
+        if hasattr(broker, "on_price_tick") and broker.on_price_tick not in feed._callbacks:
+            feed.add_callback(broker.on_price_tick)
+
+        ok = await feed.connect()
         if not ok:
-            raise HTTPException(status_code=500, detail="Failed to start paper trading")
+            raise HTTPException(status_code=500, detail="Failed to start simulated price feed")
+        await feed.subscribe(symbols)
 
-        request.app.state.paper_mode = mode
+        request.app.state.paper_symbols = symbols
+        request.app.state.paper_tick_interval = req.tick_interval
 
-        # Audit log
         auth_header = request.headers.get("authorization", "")
-        user = None
-        if auth_header.startswith("Bearer "):
-            user = get_user_from_token(auth_header[7:])
-        record_audit(user, "PAPER_TRADING_START", "execution", f"symbols={req.symbols}, capital={req.initial_capital}")
+        user = get_user_from_token(auth_header[7:]) if auth_header.startswith("Bearer ") else None
+        record_audit(user, "PAPER_TRADING_START", "execution", f"symbols={symbols}")
 
-        return {
-            "status": "started",
-            "symbols": req.symbols,
-            "initial_capital": req.initial_capital,
-            "tick_interval": req.tick_interval,
-        }
+        return {"status": "started", "symbols": symbols, "tick_interval": req.tick_interval}
     except HTTPException:
         raise
     except Exception as e:
@@ -71,23 +95,24 @@ async def start_paper_trading(
 
 @router.post("/paper/stop")
 async def stop_paper_trading(request: Request) -> dict:
-    """Stop paper trading mode. Operator+."""
+    """Stop the simulated price feed. Operator+.
+
+    Leaves the broker's cash/positions exactly as they are — stopping
+    only freezes price movement, it does not reset the paper account.
+    """
     current_user = get_current_user(request)
     if not has_permission(current_user, UserRole.OPERATOR):
         raise HTTPException(status_code=403, detail="Operator access required")
     try:
-        mode: PaperTradingMode | None = getattr(request.app.state, "paper_mode", None)
-        if mode is None or not mode._running:
-            raise HTTPException(status_code=409, detail="Paper trading not running")
+        feed: FeedManager = get_component(request, "feed")
+        if not feed.get_state().active:
+            raise HTTPException(status_code=409, detail="Paper trading feed not running")
 
-        await mode.stop()
-        request.app.state.paper_mode = None
+        await feed.disconnect()
+        request.app.state.paper_symbols = []
 
-        # Audit log
         auth_header = request.headers.get("authorization", "")
-        user = None
-        if auth_header.startswith("Bearer "):
-            user = get_user_from_token(auth_header[7:])
+        user = get_user_from_token(auth_header[7:]) if auth_header.startswith("Bearer ") else None
         record_audit(user, "PAPER_TRADING_STOP", "execution")
 
         return {"status": "stopped"}
@@ -99,21 +124,17 @@ async def stop_paper_trading(request: Request) -> dict:
 
 @router.get("/paper/status")
 async def get_paper_trading_status(request: Request) -> dict:
-    """Get paper trading status. Viewer+."""
+    """Get the simulated feed's running state and the real account. Viewer+."""
     get_current_user(request)  # Any authenticated user
     try:
-        mode: PaperTradingMode | None = getattr(request.app.state, "paper_mode", None)
-        if mode is None:
-            return {"running": False, "message": "Paper trading not started"}
+        feed: FeedManager = get_component(request, "feed")
+        broker: PaperBroker = get_component(request, "broker")
+        state = feed.get_state()
         return {
-            "running": mode._running,
-            "account": mode.get_account_summary(),
-            "config": {
-                "symbols": mode.config.symbols,
-                "initial_capital": mode.config.initial_capital,
-                "tick_interval": mode.config.tick_interval,
-                "lookback": mode.config.lookback,
-            },
+            "running": state.active,
+            "symbols": state.symbols,
+            "tick_interval": getattr(request.app.state, "paper_tick_interval", None),
+            "account": broker.to_dict(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
