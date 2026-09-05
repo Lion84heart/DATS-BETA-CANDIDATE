@@ -75,6 +75,7 @@ class ManagedBacktestConfig:
     use_position_sizing: bool = False
 
     min_quality_score: float = 55.0
+    min_confidence: float = 0.0  # raw fused-confidence entry gate, independent of the quality-score filter
     atr_stop_mult: float = 2.0
     trailing_mult: float = 2.5
     breakeven_trigger_pct: float = 1.5
@@ -86,10 +87,19 @@ async def run_managed_backtest(
     config: BacktestRunConfig,
     managed: ManagedBacktestConfig,
     strategies: list[BaseStrategy] | None = None,
+    fusion: object | None = None,
 ) -> tuple[BacktestReport, dict[str, Any]]:
-    """Replay ``bars`` through the frozen strategies and the real
-    ``DecisionFusion``, applying the Phase 4 trade-management stack
-    according to ``managed``'s toggles.
+    """Replay ``bars`` through the frozen strategies and a fusion object,
+    applying the Phase 4 trade-management stack according to
+    ``managed``'s toggles.
+
+    Args:
+        fusion: Any object exposing ``combine(signals) -> FusedDecision``
+            (e.g. the real ``intelligence.fusion.DecisionFusion``, or
+            Sprint 6's research-only ``MajorityVoteFusion``/
+            ``WeightedFusion``). Defaults to the real, unmodified
+            ``DecisionFusion()`` — every existing caller's behavior is
+            unchanged.
 
     Returns:
         ``(report, extra)`` — ``report`` has the same shape
@@ -98,7 +108,7 @@ async def run_managed_backtest(
         the quality filter, average entry quality score).
     """
     strategies = strategies or default_strategies()
-    fusion = DecisionFusion()
+    fusion = fusion or DecisionFusion()
 
     entry_filter = EntryQualityFilter(min_score=managed.min_quality_score) if managed.use_entry_filter else None
     exit_engine = DynamicExitEngine(
@@ -189,12 +199,12 @@ async def run_managed_backtest(
 
         entry_blocked = False
         if fused.direction == SignalDirection.BUY and held_qty <= 0:
-            allow = True
-            if entry_filter is not None:
+            allow = fused.confidence >= managed.min_confidence
+            if entry_filter is not None and allow:
                 allow = entry_filter.allow_entry(quality.score)
-                if not allow:
-                    entry_blocked = True
-                    entries_blocked_by_filter += 1
+            if not allow:
+                entry_blocked = True
+                entries_blocked_by_filter += 1
             if allow:
                 if sizing_engine is not None:
                     qty = sizing_engine.compute_quantity(broker.account.cash, bar.close, quality.score, quality.atr_ratio)

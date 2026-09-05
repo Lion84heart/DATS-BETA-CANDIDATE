@@ -1,8 +1,24 @@
 # DATS Beta — Project Status
 
-**Last updated:** 2026-09-04 (Phase 4 complete)
+**Last updated:** 2026-09-05 (Research Cycle 001 complete)
 
-This is a living snapshot of what actually works in the running application today, maintained alongside each sprint. For narrative history of *why* things changed, see the sprint completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
+## Mission status (as of 2026-09-05)
+
+**The software platform is considered complete.** The mission has changed: **we are no longer building software — we are searching for one trading strategy with a statistically credible edge on real crypto market data**, using only the infrastructure already built (Strategy Engine, Decision Fusion, Paper Trading Engine, Historical Data Infrastructure, Backtesting Engine, Trade Management, Research Framework). No new indicators, strategies, UI, dashboards, or infrastructure are being added unless a research cycle's own evidence requires it.
+
+**Success criteria a candidate must clear, robustly, per-symbol, not just on average:** Profit Factor > 1.50, Sharpe > 1.20, Max Drawdown < 15%, positive CAGR, stable across bull/bear/sideways regimes, on multiple symbols and timeframes.
+
+**Current state**: [Research Cycle 001](docs/RESEARCH_CYCLE_001.md) tested 216 backtests (72 configurations × BTCUSDT/ETHUSDT/SOLUSDT) on real 2021–2024 crypto history. Zero configurations passed all four criteria on every symbol. **The current production configuration (all 8 strategies, live Decision Fusion, no trade management) would have lost money on this window** (Sharpe 0.15, Max DD 71.3%, CAGR -4.4%) — an important disproof, not a success. The most promising lead found — a strategy subset of ATR/Trend Detection/Support-Resistance/Bollinger Bands combined with Phase 4's full trade-management stack — gets close on BTC and ETH (Max DD under 15%, PF over 1.5) but falls short on Sharpe, and SOLUSDT remains a clear outlier. This lead is being carried into Cycle 002 for validation on a held-out 2024–2026 window that Cycle 001 deliberately never touched. **No candidate has progressed to paper trading yet.**
+
+## Research cycle history
+
+| Cycle | Hypothesis | Decision | Report |
+|---|---|---|---|
+| 001 | A strategy-subset / fusion-method / confidence-threshold / trade-management combination clears all 4 success criteria on real 2021–2024 BTC/ETH/SOL data | **Rejected** as a finished strategy; one lead (`protective_pair` + `full_risk_adjusted`) carried forward for holdout validation | [RESEARCH_CYCLE_001.md](docs/RESEARCH_CYCLE_001.md) |
+
+## Platform history (superseded by the mission above — kept as reference)
+
+This section is a living snapshot of what actually works in the running application, maintained through Phase 4. For narrative history of *why* things changed, see the sprint/phase completion reports in `docs/`. For the original full audit this roadmap is derived from, see `docs/CTO-FUNCTIONAL-AUDIT-REPORT.md`.
 
 ## What works today
 
