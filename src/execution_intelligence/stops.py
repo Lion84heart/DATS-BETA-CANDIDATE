@@ -17,6 +17,7 @@ _DEFAULT_ATR_STOP_MULT = 2.0
 _DEFAULT_TRAILING_ATR_MULT = 2.5
 _DEFAULT_BREAKEVEN_TRIGGER_PCT = 1.5   # once unrealized gain reaches this %, arm break-even
 _DEFAULT_BREAKEVEN_BUFFER_PCT = 0.1    # breakeven stop sits this % above entry (covers commission/slippage)
+_DEFAULT_TAKE_PROFIT_ATR_MULT = 3.0    # symmetric upside counterpart to the ATR stop
 
 
 @dataclass
@@ -63,3 +64,18 @@ def breakeven_stop_price(
     if not state.breakeven_armed:
         return None
     return state.entry_price * (1.0 + buffer_pct / 100.0)
+
+
+def take_profit_price(
+    entry_price: float, atr_at_entry: float | None, mult: float = _DEFAULT_TAKE_PROFIT_ATR_MULT,
+) -> float | None:
+    """A fixed upside target, set once at entry and never moved — the
+    symmetric counterpart to ``initial_atr_stop_price``. Not part of
+    Phase 4's original module set; added when the live paper-trading
+    pipeline needed a genuine "Take Profit" value to record per trade,
+    reusing the identical ATR-multiple pattern already used for the
+    stop loss rather than inventing a new mechanism.
+    """
+    if atr_at_entry is None or atr_at_entry <= 0:
+        return None
+    return entry_price + mult * atr_at_entry
